@@ -305,3 +305,57 @@ def social_snapshot(coin: str, end: date) -> dict[str, str]:
         "stocktwits": fetch_stocktwits_messages(f"{coin}.X", limit=30, **window),
         "reddit": fetch_reddit_posts(coin, CRYPTO_SUBREDDITS, **window),
     }
+
+
+# --- coin universe ---------------------------------------------------------
+
+# The list behind the bubbles on cryptobubbles.net: the top 1000 coins by market cap.
+CRYPTOBUBBLES_URL = "https://cryptobubbles.net/backend/data/bubbles1000.usd.json"
+
+
+def parse_cryptobubbles(data) -> list[dict]:
+    """``[{id, name, rank}]`` from the cryptobubbles JSON, one entry per ticker, by rank."""
+    rows = data.get("data", []) if isinstance(data, dict) else data
+    coins: dict[str, dict] = {}
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        symbol = str(row.get("symbol") or "").strip().upper()
+        name = str(row.get("name") or "").strip()
+        rank = row.get("rank")
+        if not symbol or not name or not isinstance(rank, int | float):
+            continue
+        entry = {"id": symbol, "name": name, "rank": int(rank), "stable": bool(row.get("stable"))}
+        # Two coins can share a ticker; the larger one keeps it.
+        if symbol not in coins or entry["rank"] < coins[symbol]["rank"]:
+            coins[symbol] = entry
+    return sorted(coins.values(), key=lambda c: c["rank"])
+
+
+def fetch_coin_universe() -> tuple[list[dict], str]:
+    """Coins to pick from: cryptobubbles.net, or CoinGecko's top 1000 when it is unreachable."""
+    errors = []
+    try:
+        coins = parse_cryptobubbles(_get_json(os.environ.get("CRYPTOBUBBLES_URL", CRYPTOBUBBLES_URL)))
+        if coins:
+            return coins, "cryptobubbles.net"
+        errors.append("cryptobubbles.net: unerwartetes Format")
+    except SourceError as exc:
+        errors.append(str(exc))
+    rows = []
+    try:
+        for page in range(1, 5):
+            rows += _get_json(
+                "https://api.coingecko.com/api/v3/coins/markets",
+                {"vs_currency": "usd", "order": "market_cap_desc", "per_page": 250, "page": page},
+                _coingecko_headers(),
+            )
+    except SourceError as exc:
+        errors.append(str(exc))
+    coins = parse_cryptobubbles([
+        {"symbol": r.get("symbol"), "name": r.get("name"), "rank": r.get("market_cap_rank")}
+        for r in rows if isinstance(r, dict)
+    ])
+    if coins:
+        return coins, "CoinGecko (cryptobubbles.net nicht erreichbar)"
+    raise SourceError("; ".join(errors))

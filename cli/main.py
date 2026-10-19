@@ -183,6 +183,26 @@ def sentiment(
     raise typer.Exit(code=code)
 
 
+@app.command("sentiment-web")
+def sentiment_web(
+    port: int = typer.Option(8765, "--port", help="Port on localhost"),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Do not open the browser"),
+    llm: str = typer.Option("auto", "--llm", envvar="SENTIMENT_LLM",
+                            help="Assessment backend for reports started from the page (as for `sentiment`)"),
+    model: str = typer.Option(None, "--model", help="Model for the assessment"),
+    out: str = typer.Option(None, "--out", help="Report folder (default: <results_dir>/sentiment)"),
+):
+    """Local web page: the saved sentiment reports as a tree, and a form to add coins."""
+    from pathlib import Path
+
+    from tradingagents.sentiment_report.__main__ import default_out_dir
+    from tradingagents.sentiment_report.web import serve
+
+    serve(Path(out) if out else default_out_dir(), port=port, open_browser=not no_browser,
+          llm_backend=llm, llm_model=model,
+          say=lambda line: console.print(line, markup=False, highlight=False))
+
+
 # The plans `login` and `logout` take: the providers signed in to, not keyed.
 Plan = StrEnum("Plan", {name: name for name in SIGNED_IN_PROVIDERS})
 

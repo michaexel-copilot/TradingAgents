@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sentiment-Berichte</title>
+<style>
+:root{--bg:#f4f6f8;--panel:#fff;--ink:#15202b;--muted:#5a6773;--line:#d9dfe5;--accent:#2b4cc4;--accent-bg:#e8edfb;
+--ok:#1a8a5a;--err:#c2412d;--warn:#a86a12;--mono:ui-monospace,Consolas,Menlo,monospace;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0f151b;--panel:#161e26;--ink:#e6ecf1;--muted:#9aa7b3;--line:#2a3540;
+--accent:#7d9bff;--accent-bg:#1d2740;--ok:#4cc58f;--err:#f07a63;--warn:#e0a24a;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+h1{font-size:18px;margin:0}
+form{display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(220px,1.6fr) auto;gap:12px;align-items:start}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+input,select,button{min-width:0;width:100%;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:6px 8px}
+select[size]{padding:2px;height:150px}
+optgroup{font-style:normal;color:var(--muted)}
+option{color:var(--ink)}
+button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+.fields{display:grid;grid-template-columns:110px 1fr 90px;gap:8px}
+.check{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
+.check input{width:auto}
+.actions{display:flex;flex-direction:column;gap:8px;padding-top:19px}
+#msg{font-size:13px;min-height:18px}
+.err{color:var(--err)}.ok{color:var(--ok)}.warn{color:var(--warn)}
+main{flex:1;display:grid;grid-template-columns:300px 1fr;min-height:0}
+nav{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+nav .filter{padding:10px;border-bottom:1px solid var(--line)}
+nav .filter input{width:100%}
+#tree{overflow:auto;padding:6px 8px 16px 4px;flex:1}
+details{margin-left:10px}
+summary{cursor:pointer;padding:3px 6px;border-radius:4px;list-style-position:outside}
+summary:hover{background:var(--bg)}
+.letter>summary{font:700 14px var(--mono)}
+.coin>summary .id{font-family:var(--mono);font-weight:600}
+.coin>summary .name{color:var(--muted)}
+.date{display:block;width:calc(100% - 22px);min-width:0;margin:1px 0 1px 22px;text-align:left;background:none;border:0;color:var(--ink);font:13px var(--mono);font-weight:400;padding:3px 6px;border-radius:4px}
+.date:hover{background:var(--bg)}
+.date.ghost{color:var(--accent);font-family:inherit}
+.date.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
+.empty{margin:2px 0 2px 28px;font-size:13px;color:var(--muted)}
+section{display:flex;flex-direction:column;min-height:0;min-width:0}
+.detail-head{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
+.detail-head .meta{font-size:14px}
+.detail-head .meta b{font-family:var(--mono)}
+iframe{flex:1;border:0;width:100%;background:var(--bg)}
+.placeholder{padding:40px 16px;color:var(--muted)}
+#jobs{font-size:13px;display:flex;flex-wrap:wrap;gap:6px 14px}
+@media (max-width:820px){
+  form{grid-template-columns:1fr}.actions{padding-top:0}
+  main{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  nav{border-right:0;border-bottom:1px solid var(--line);max-height:40vh}
+  iframe{min-height:70vh}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sentiment-Berichte</h1>
+  <form id="add">
+    <label>Coin suchen (Name oder ID)
+      <input id="search" type="search" placeholder="z.B. QNT oder Quant" autocomplete="off">
+      <span id="universe-note"></span>
+    </label>
+    <label>Coin aus der Liste wählen
+      <select id="pick" size="8"></select>
+    </label>
+    <div class="actions">
+      <div class="fields">
+        <label>Coin-ID<input id="coin-id" required maxlength="15" placeholder="QNT"></label>
+        <label>Coin-Name<input id="coin-name" required maxlength="80" placeholder="Quant"></label>
+        <label>Tage<input id="days" type="number" min="7" max="730" value="56"></label>
+      </div>
+      <label class="check"><input id="run" type="checkbox" checked> gleich einen Bericht erstellen</label>
+      <button type="submit">Coin anlegen</button>
+      <div id="msg"></div>
+    </div>
+  </form>
+  <div id="jobs"></div>
+</header>
+<main>
+  <nav>
+    <div class="filter"><input id="tree-filter" type="search" placeholder="Berichte filtern (Name oder ID)"></div>
+    <div id="tree"></div>
+  </nav>
+  <section>
+    <div class="detail-head" id="detail-head" hidden>
+      <div class="meta" id="detail-meta"></div>
+      <button class="ghost" id="rerun" type="button">Neuen Bericht bis heute</button>
+    </div>
+    <div class="placeholder" id="placeholder">Wähle links ein Datum, um den Bericht zu sehen.</div>
+    <iframe id="report" title="Bericht" hidden></iframe>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const el = (tag, props = {}, ...children) => {
+  const node = Object.assign(document.createElement(tag), props);
+  children.forEach(c => node.append(c));
+  return node;
+};
+const de = iso => iso.split("-").reverse().join(".");
+let state = {coins: [], jobs: []}, universe = [], selected = null, openCoins = new Set(), polling = null;
+
+async function api(path, body) {
+  const res = await fetch(path, body ? {method: "POST", headers: {"Content-Type": "application/json"},
+                                        body: JSON.stringify(body)} : {});
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+function matches(coin, q) {
+  q = q.trim().toLowerCase();
+  return !q || coin.id.toLowerCase().includes(q) || (coin.name || "").toLowerCase().includes(q);
+}
+
+// --- form: coin list in packets of 100 by rank -----------------------------
+function renderPick() {
+  const q = $("search").value, pick = $("pick");
+  pick.replaceChildren();
+  const groups = new Map();
+  universe.filter(c => matches(c, q)).forEach(c => {
+    const from = Math.floor((c.rank - 1) / 100) * 100 + 1;
+    if (!groups.has(from)) groups.set(from, el("optgroup", {label: `Rang ${from}–${from + 99}`}));
+    groups.get(from).append(el("option", {value: c.id, textContent: `${c.id} (${c.name}) · #${c.rank}`}));
+  });
+  groups.forEach(g => pick.append(g));
+  if (!groups.size) pick.append(el("option", {disabled: true, textContent: universe.length ? "Kein Treffer" : "Liste nicht geladen"}));
+}
+async function loadUniverse() {
+  const note = $("universe-note");
+  try {
+    const data = await api("/api/universe");
+    universe = data.coins;
+    note.textContent = `${universe.length} Coins von ${data.source}, ohne bereits analysierte`;
+    note.className = "";
+  } catch (e) {
+    note.textContent = e.message + " – ID und Name lassen sich auch von Hand eintragen.";
+    note.className = "err";
+  }
+  renderPick();
+}
+$("search").addEventListener("input", renderPick);
+$("pick").addEventListener("change", () => {
+  const coin = universe.find(c => c.id === $("pick").value);
+  if (coin) { $("coin-id").value = coin.id; $("coin-name").value = coin.name; }
+});
+$("add").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const msg = $("msg");
+  try {
+    const data = await api("/api/coins", {id: $("coin-id").value, name: $("coin-name").value,
+                                          days: Number($("days").value) || 56, run: $("run").checked});
+    msg.textContent = `${data.coin.id} angelegt` + (data.job ? ", Bericht wird erstellt …" : ".");
+    msg.className = "ok";
+    openCoins.add(data.coin.id);
+    universe = universe.filter(c => c.id !== data.coin.id);
+    $("coin-id").value = $("coin-name").value = "";
+    renderPick();
+    await refresh();
+  } catch (e) { msg.textContent = e.message; msg.className = "err"; }
+});
+
+// --- tree: letter > coin > report end date ---------------------------------
+function renderTree() {
+  const q = $("tree-filter").value, tree = $("tree");
+  tree.replaceChildren();
+  const letters = new Map();
+  state.coins.filter(c => matches(c, q)).forEach(c => {
+    const letter = c.id[0];
+    if (!letters.has(letter)) letters.set(letter, []);
+    letters.get(letter).push(c);
+  });
+  if (!letters.size) tree.append(el("p", {className: "empty", textContent: state.coins.length ? "Kein Treffer" : "Noch keine Coins. Lege oben einen an."}));
+  [...letters.keys()].sort().forEach(letter => {
+    const group = el("details", {className: "letter", open: true}, el("summary", {textContent: letter}));
+    letters.get(letter).forEach(c => {
+      const summary = el("summary", {}, el("span", {className: "id", textContent: c.id}),
+                         " ", el("span", {className: "name", textContent: c.name ? `(${c.name})` : ""}));
+      const node = el("details", {className: "coin", open: openCoins.has(c.id) || !!q}, summary);
+      node.addEventListener("toggle", () => node.open ? openCoins.add(c.id) : openCoins.delete(c.id));
+      const ends = c.reports.map(r => r.end);
+      c.reports.forEach(r => {
+        const twice = ends.filter(e => e === r.end).length > 1;
+        const label = de(r.end) + (twice ? ` (ab ${de(r.start)})` : "");
+        const btn = el("button", {type: "button", className: "date" + (selected?.file === r.file ? " active" : ""),
+                                  textContent: label, title: `Zeitraum ${de(r.start)} – ${de(r.end)}`});
+        btn.addEventListener("click", () => show(c, r));
+        node.append(btn);
+      });
+      const job = state.jobs.filter(j => j.coin === c.id && j.status !== "fertig").pop();
+      if (job) node.append(el("div", {className: "empty " + (job.status === "fehler" ? "err" : "warn"),
+                                      textContent: job.status === "fehler" ? `Fehler: ${job.message}` : `Bericht ${job.status} …`}));
+      else if (!c.reports.length) node.append(el("div", {className: "empty", textContent: "noch kein Bericht"}));
+      if (!c.reports.length && (!job || job.status === "fehler")) {
+        const run = el("button", {type: "button", className: "date ghost", textContent: "Bericht erstellen"});
+        run.addEventListener("click", () => startReport(c.id, Number($("days").value) || 56));
+        node.append(run);
+      }
+      group.append(node);
+    });
+    tree.append(group);
+  });
+}
+$("tree-filter").addEventListener("input", renderTree);
+
+function show(coin, report) {
+  selected = {...report, coin};
+  $("placeholder").hidden = true;
+  $("detail-head").hidden = false;
+  $("detail-meta").replaceChildren(el("b", {textContent: coin.id}), coin.name ? ` (${coin.name})` : "",
+    ` · Bericht vom ${de(report.end)} · Zeitraum ${de(report.start)} – ${de(report.end)}`);
+  const frame = $("report");
+  frame.hidden = false;
+  frame.src = "/reports/" + encodeURIComponent(report.file);
+  renderTree();
+}
+async function startReport(id, days) {
+  try { await api("/api/reports", {id, days}); openCoins.add(id); await refresh(); }
+  catch (e) { $("msg").textContent = e.message; $("msg").className = "err"; }
+}
+$("rerun").addEventListener("click", () => {
+  if (selected) startReport(selected.coin.id, Math.round((new Date(selected.end) - new Date(selected.start)) / 864e5));
+});
+
+// --- jobs and refresh --------------------------------------------------------
+function renderJobs() {
+  const jobs = $("jobs");
+  jobs.replaceChildren(...state.jobs.slice(-6).map(j => el("span", {
+    className: {fertig: "ok", fehler: "err"}[j.status] || "warn",
+    textContent: `${j.coin} ${de(j.start)}–${de(j.end)}: ${j.status}${j.message ? " · " + j.message : ""}`}))); 
+}
+async function refresh() {
+  state = await api("/api/state");
+  renderTree();
+  renderJobs();
+  const busy = state.jobs.some(j => j.status === "wartet" || j.status === "läuft");
+  if (busy && !polling) polling = setInterval(refresh, 3000);
+  if (!busy && polling) { clearInterval(polling); polling = null; }
+}
+refresh().then(loadUniverse).then(refresh);
+</script>
+</body>
+</html>
