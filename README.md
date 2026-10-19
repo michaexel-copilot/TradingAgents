@@ -366,9 +366,10 @@ _, decision = ta.propagate("NVDA", "2026-09-01")
 `tradingagents sentiment` writes a report on one coin and period: daily price and volume, funding rate and open interest of the perpetual, the market-wide Fear & Greed index and, with a free `SANTIMENT_API_KEY`, social volume, weighted sentiment and active addresses. Rule-based buy and sell signals are marked on a chart and scored after the fact, and an optional written assessment explains them. The report is one HTML page plus the data as JSON, under `<results_dir>/sentiment`.
 
 ```bash
-tradingagents sentiment QNT                      # the last 8 weeks
-tradingagents sentiment ARB --start 2026-06-01 --end 2026-08-01 --llm none
-python -m tradingagents.sentiment_report QNT --days 90
+uv sync                                                 # once: creates .venv and installs
+uv run tradingagents sentiment QNT                      # the last 8 weeks
+uv run tradingagents sentiment ARB --start 2026-06-01 --end 2026-08-01 --llm none
+uv run python -m tradingagents.sentiment_report QNT --days 90
 ```
 
 `--llm` picks who writes the assessment:
