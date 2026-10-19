@@ -31,18 +31,20 @@ def test_cryptobubbles_one_entry_per_ticker_by_rank():
 def library(tmp_path):
     (tmp_path / "QNT_20260824-20261019_sentiment.html").write_text("<p>qnt</p>", encoding="utf-8")
     (tmp_path / "QNT_20260901-20261019_sentiment.html").write_text("<p>qnt2</p>", encoding="utf-8")
+    # Written last but ending first: the tree orders by end date, not by file time.
+    (tmp_path / "QNT_20260701-20260930_sentiment.html").write_text("<p>old</p>", encoding="utf-8")
     (tmp_path / "notes.html").write_text("x", encoding="utf-8")
     with mock.patch.object(cs, "fetch_coin_universe", return_value=(cs.parse_cryptobubbles(BUBBLES), "test")):
         yield web.Library(tmp_path, llm_backend="none")
 
 
-def test_state_groups_reports_under_coins(library):
+def test_state_orders_reports_by_end_date(library):
     library.universe()  # names come from the list for coins only known by their reports
     coins = library.state()["coins"]
     assert [c["id"] for c in coins] == ["QNT"]
     assert coins[0]["name"] == "Quant"
     assert [(r["start"], r["end"]) for r in coins[0]["reports"]] == [
-        ("2026-09-01", "2026-10-19"), ("2026-08-24", "2026-10-19")]
+        ("2026-07-01", "2026-09-30"), ("2026-08-24", "2026-10-19"), ("2026-09-01", "2026-10-19")]
 
 
 def test_universe_leaves_out_analysed_coins(library):

@@ -98,7 +98,7 @@ class Library:
         for report in reports:
             coins[report["coin"]]["reports"].append(report)
         for coin in coins.values():
-            coin["reports"].sort(key=lambda r: (r["end"], r["start"]), reverse=True)
+            coin["reports"].sort(key=lambda r: (r["end"], r["start"]))
         return {"coins": sorted(coins.values(), key=lambda c: c["id"]), "jobs": self.jobs[-20:]}
 
     def universe(self) -> dict:

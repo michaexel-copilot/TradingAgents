@@ -263,7 +263,7 @@ async function refresh() {
   // An empty detail page switches to the coin's first report once it is there.
   if (selected && !selected.file) {
     const coin = state.coins.find(c => c.id === selected.coin.id);
-    if (coin && coin.reports.length) return show(coin, coin.reports[0]), refresh();
+    if (coin && coin.reports.length) return show(coin, coin.reports.at(-1)), refresh();
   }
   renderTree();
   renderJobs();
