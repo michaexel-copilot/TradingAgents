@@ -3,9 +3,10 @@
     uv run tradingagents sentiment-web        # http://127.0.0.1:8765
 
 Left a tree (first letter, coin, report end date), right the selected report,
-above it a form that adds a coin from the cryptobubbles.net list and runs its
-first report. Coins are kept in ``coins.json`` next to the reports; reports
-run one after another in a background thread. Listens on localhost only.
+above it a form that adds a coin from the cryptobubbles.net list. A new coin
+opens on an empty page where its first report is started for a chosen period.
+Coins are kept in ``coins.json`` next to the reports; reports run one after
+another in a background thread. Listens on localhost only.
 """
 
 from __future__ import annotations
@@ -184,7 +185,7 @@ def make_handler(library: Library):
                 if self.path == "/api/coins":
                     coin = library.add_coin(str(body.get("id", "")), str(body.get("name", "")))
                     job = library.queue_report(coin["id"], None, None, int(body.get("days") or 56)) \
-                        if body.get("run", True) else None
+                        if body.get("run") else None
                     self._json({"coin": coin, "job": job}, HTTPStatus.CREATED)
                 elif self.path == "/api/reports":
                     job = library.queue_report(str(body.get("id", "")), body.get("start"), body.get("end"),

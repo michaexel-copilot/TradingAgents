@@ -23,7 +23,7 @@ option{color:var(--ink)}
 button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 button.ghost{background:transparent;color:var(--accent)}
 button:disabled{opacity:.5;cursor:default}
-.fields{display:grid;grid-template-columns:110px 1fr 90px;gap:8px}
+.fields{display:grid;grid-template-columns:110px 1fr;gap:8px}
 .check{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
 .check input{width:auto}
 .actions{display:flex;flex-direction:column;gap:8px;padding-top:19px}
@@ -78,9 +78,7 @@ iframe{flex:1;border:0;width:100%;background:var(--bg)}
       <div class="fields">
         <label>Coin-ID<input id="coin-id" required maxlength="15" placeholder="QNT"></label>
         <label>Coin-Name<input id="coin-name" required maxlength="80" placeholder="Quant"></label>
-        <label>Tage<input id="days" type="number" min="7" max="730" value="56"></label>
       </div>
-      <label class="check"><input id="run" type="checkbox" checked> gleich einen Bericht erstellen</label>
       <button type="submit">Coin anlegen</button>
       <div id="msg"></div>
     </div>
@@ -98,7 +96,7 @@ iframe{flex:1;border:0;width:100%;background:var(--bg)}
       <form class="rerun" id="rerun">
         <label>Von<input id="rerun-start" type="date" required></label>
         <label>Bis<input id="rerun-end" type="date" required></label>
-        <button class="ghost" type="submit">Neuen Bericht erstellen</button>
+        <button class="ghost" type="submit">Bericht erstellen</button>
       </form>
     </div>
     <div class="placeholder" id="placeholder">Wähle links ein Datum, um den Bericht zu sehen.</div>
@@ -163,15 +161,15 @@ $("add").addEventListener("submit", async ev => {
   ev.preventDefault();
   const msg = $("msg");
   try {
-    const data = await api("/api/coins", {id: $("coin-id").value, name: $("coin-name").value,
-                                          days: Number($("days").value) || 56, run: $("run").checked});
-    msg.textContent = `${data.coin.id} angelegt` + (data.job ? ", Bericht wird erstellt …" : ".");
+    const data = await api("/api/coins", {id: $("coin-id").value, name: $("coin-name").value});
+    msg.textContent = `${data.coin.id} angelegt. Wähle rechts den Zeitraum für den ersten Bericht.`;
     msg.className = "ok";
     openCoins.add(data.coin.id);
     universe = universe.filter(c => c.id !== data.coin.id);
     $("coin-id").value = $("coin-name").value = "";
     renderPick();
     await refresh();
+    show(state.coins.find(c => c.id === data.coin.id) || {...data.coin, reports: []}, null);
   } catch (e) { msg.textContent = e.message; msg.className = "err"; }
 });
 
@@ -205,11 +203,11 @@ function renderTree() {
       const job = state.jobs.filter(j => j.coin === c.id && j.status !== "fertig").pop();
       if (job) node.append(el("div", {className: "empty " + (job.status === "fehler" ? "err" : "warn"),
                                       textContent: job.status === "fehler" ? `Fehler: ${job.message}` : `Bericht ${job.status} …`}));
-      else if (!c.reports.length) node.append(el("div", {className: "empty", textContent: "noch kein Bericht"}));
       if (!c.reports.length && (!job || job.status === "fehler")) {
-        const run = el("button", {type: "button", className: "date ghost", textContent: "Bericht erstellen"});
-        run.addEventListener("click", () => startReport(c.id, Number($("days").value) || 56));
-        node.append(run);
+        const empty = el("button", {type: "button", textContent: "noch kein Bericht",
+                                    className: "date ghost" + (selected && !selected.file && selected.coin.id === c.id ? " active" : "")});
+        empty.addEventListener("click", () => show(c, null));
+        node.append(empty);
       }
       group.append(node);
     });
@@ -218,16 +216,21 @@ function renderTree() {
 }
 $("tree-filter").addEventListener("input", renderTree);
 
+// A coin's detail: its report, or with report null an empty page to start the first one.
 function show(coin, report) {
-  selected = {...report, coin};
-  $("placeholder").hidden = true;
+  selected = {...(report || {}), coin};
+  openCoins.add(coin.id);
   if ($("detail-head").hidden) resetPeriod();
   $("detail-head").hidden = false;
   $("detail-meta").replaceChildren(el("b", {textContent: coin.id}), coin.name ? ` (${coin.name})` : "",
-    ` · Bericht vom ${de(report.end)} · Zeitraum ${de(report.start)} – ${de(report.end)}`);
+    report ? ` · Bericht vom ${de(report.end)} · Zeitraum ${de(report.start)} – ${de(report.end)}`
+           : " · noch kein Bericht");
   const frame = $("report");
-  frame.hidden = false;
-  frame.src = "/reports/" + encodeURIComponent(report.file);
+  frame.hidden = !report;
+  $("placeholder").hidden = !!report;
+  $("placeholder").textContent = "Noch kein Bericht. Wähle oben Von und Bis und klicke auf „Bericht erstellen“.";
+  if (report) frame.src = "/reports/" + encodeURIComponent(report.file);
+  else frame.removeAttribute("src");
   renderTree();
 }
 async function startReport(id, days, start, end) {
@@ -257,6 +260,11 @@ function renderJobs() {
 }
 async function refresh() {
   state = await api("/api/state");
+  // An empty detail page switches to the coin's first report once it is there.
+  if (selected && !selected.file) {
+    const coin = state.coins.find(c => c.id === selected.coin.id);
+    if (coin && coin.reports.length) return show(coin, coin.reports[0]), refresh();
+  }
   renderTree();
   renderJobs();
   const busy = state.jobs.some(j => j.status === "wartet" || j.status === "läuft");

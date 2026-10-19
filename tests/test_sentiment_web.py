@@ -98,7 +98,7 @@ def test_routes(library):
     assert call(library, "GET", "/reports/QNT_20260824-20261019_sentiment.html") == (200, "<p>qnt</p>")
     assert call(library, "GET", "/reports/notes.html")[0] == 404
     assert call(library, "GET", "/reports/../coins.json")[0] == 404
-    status, body = call(library, "POST", "/api/coins", {"id": "ARB", "name": "Arbitrum", "run": False})
+    status, body = call(library, "POST", "/api/coins", {"id": "ARB", "name": "Arbitrum"})
     assert status == 201 and json.loads(body)["job"] is None
     status, body = call(library, "POST", "/api/coins", {"id": "ARB", "name": "Arbitrum", "run": False})
     assert status == 400 and "schon" in json.loads(body)["error"]

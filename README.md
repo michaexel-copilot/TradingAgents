@@ -380,7 +380,7 @@ uv run python -m tradingagents.sentiment_report QNT --days 90
 
 Sources that are unreachable or need a key are listed as missing in the report; only their rule conditions drop out.
 
-`uv run tradingagents sentiment-web` opens a local page (http://127.0.0.1:8765) over the saved reports: a tree by first letter, coin and report end date on the left, the selected report on the right, and above them a form that adds a coin from the cryptobubbles.net top 1000 (grouped by rank in packets of 100, searchable by name or ticker, coins already analysed left out) and runs its first report.
+`uv run tradingagents sentiment-web` opens a local page (http://127.0.0.1:8765) over the saved reports: a tree by first letter, coin and report end date on the left, the selected report on the right, and above them a form that adds a coin from the cryptobubbles.net top 1000 (grouped by rank in packets of 100, searchable by name or ticker, coins already analysed left out). A new coin opens on an empty page; its first report starts once you pick the period (default: the last 60 days).
 
 ## Evaluating decisions over time
 
