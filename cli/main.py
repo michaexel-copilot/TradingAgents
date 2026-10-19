@@ -160,6 +160,29 @@ def backtest(
         console.print(f"[yellow]unsettled:[/yellow] {ticker}: {reason}")
 
 
+@app.command()
+def sentiment(
+    coin: str = typer.Argument(..., help="Coin ticker, e.g. QNT"),
+    start: str = typer.Option(None, "--start", help="First day, YYYY-MM-DD"),
+    end: str = typer.Option(None, "--end", help="Last day, YYYY-MM-DD (default: today)"),
+    days: int = typer.Option(56, "--days", help="Days back when --start is omitted (default: 8 weeks)"),
+    llm: str = typer.Option(
+        "auto", "--llm", envvar="SENTIMENT_LLM",
+        help="Written assessment: claude-code (your own Claude plan, claude -p), "
+        "api (ANTHROPIC_API_KEY), none, or auto",
+    ),
+    model: str = typer.Option(None, "--model", help="Model, e.g. sonnet (claude-code) or claude-sonnet-5 (api)"),
+    santiment_slug: str = typer.Option(None, "--santiment-slug", help="Santiment project slug if the ticker is ambiguous"),
+    out: str = typer.Option(None, "--out", help="Output folder (default: <results_dir>/sentiment)"),
+):
+    """Sentiment report with buy and sell signals for one coin and period, as HTML and JSON."""
+    from tradingagents.sentiment_report.__main__ import run as run_sentiment
+
+    code = run_sentiment(coin, start, end, days, llm, model, santiment_slug, out,
+                         say=lambda line: console.print(line, markup=False, highlight=False))
+    raise typer.Exit(code=code)
+
+
 # The plans `login` and `logout` take: the providers signed in to, not keyed.
 Plan = StrEnum("Plan", {name: name for name in SIGNED_IN_PROVIDERS})
 

@@ -361,6 +361,24 @@ ta = TradingAgentsGraph(config=config)
 _, decision = ta.propagate("NVDA", "2026-09-01")
 ```
 
+## Coin sentiment report
+
+`tradingagents sentiment` writes a report on one coin and period: daily price and volume, funding rate and open interest of the perpetual, the market-wide Fear & Greed index and, with a free `SANTIMENT_API_KEY`, social volume, weighted sentiment and active addresses. Rule-based buy and sell signals are marked on a chart and scored after the fact, and an optional written assessment explains them. The report is one HTML page plus the data as JSON, under `<results_dir>/sentiment`.
+
+```bash
+tradingagents sentiment QNT                      # the last 8 weeks
+tradingagents sentiment ARB --start 2026-06-01 --end 2026-08-01 --llm none
+python -m tradingagents.sentiment_report QNT --days 90
+```
+
+`--llm` picks who writes the assessment:
+
+- `claude-code` runs the Claude Code CLI you are signed in to (`claude -p`, tools off), so it draws on your own Pro or Max plan. That is for your personal runs only; Anthropic does not allow offering a plan's login to other people or products. The call drops `ANTHROPIC_API_KEY` from its environment, since `claude -p` would otherwise bill that key.
+- `api` uses `ANTHROPIC_API_KEY`, billed per token. Use it when the program runs unattended for others or is passed on.
+- `none` keeps only the computed signals; `auto` (default) tries `claude-code`, then `api`.
+
+Sources that are unreachable or need a key are listed as missing in the report; only their rule conditions drop out.
+
 ## Evaluating decisions over time
 
 One run gives one decision, which cannot tell you whether the system decides well. `run_backtest` runs the same pipeline over a grid of tickers and dates, writes to a memory log of its own, and scores the decisions whose holding window has since traded.
