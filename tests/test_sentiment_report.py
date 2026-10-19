@@ -120,6 +120,8 @@ def test_claude_code_backend_uses_plan_not_api_key(monkeypatch):
     assert command[:2] == ["/usr/bin/claude", "-p"] and "--tools" in command
     assert "ANTHROPIC_API_KEY" not in env
     assert "QNT" in run.call_args.kwargs["input"]
+    # Windows' default code page cannot carry the emoji in social posts.
+    assert run.call_args.kwargs["encoding"] == "utf-8"
 
 
 def test_failed_llm_keeps_the_report():

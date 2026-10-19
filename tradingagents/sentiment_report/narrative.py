@@ -89,9 +89,14 @@ def via_claude_code(prompt: str, model: str | None = None, timeout: float = 300.
         "--no-session-persistence",
     ]
     try:
-        done = subprocess.run(command, input=prompt, capture_output=True, text=True, env=env, timeout=timeout)
+        # UTF-8 explicitly: on Windows text mode defaults to the ANSI code page,
+        # which cannot encode the emoji social posts carry.
+        done = subprocess.run(command, input=prompt, capture_output=True, encoding="utf-8",
+                              errors="replace", env=env, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise NarrativeError("claude -p hat nicht rechtzeitig geantwortet") from None
+    except OSError as exc:
+        raise NarrativeError(f"claude -p ließ sich nicht starten: {exc}") from None
     try:
         result = json.loads(done.stdout)
     except json.JSONDecodeError:
