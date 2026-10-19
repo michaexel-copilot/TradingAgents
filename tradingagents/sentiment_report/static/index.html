@@ -49,6 +49,9 @@ section{display:flex;flex-direction:column;min-height:0;min-width:0}
 .detail-head{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
 .detail-head .meta{font-size:14px}
 .detail-head .meta b{font-family:var(--mono)}
+form.rerun{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+form.rerun label{flex-direction:column;width:150px}
+form.rerun button{width:auto}
 iframe{flex:1;border:0;width:100%;background:var(--bg)}
 .placeholder{padding:40px 16px;color:var(--muted)}
 #jobs{font-size:13px;display:flex;flex-wrap:wrap;gap:6px 14px}
@@ -92,7 +95,11 @@ iframe{flex:1;border:0;width:100%;background:var(--bg)}
   <section>
     <div class="detail-head" id="detail-head" hidden>
       <div class="meta" id="detail-meta"></div>
-      <button class="ghost" id="rerun" type="button">Neuen Bericht bis heute</button>
+      <form class="rerun" id="rerun">
+        <label>Von<input id="rerun-start" type="date" required></label>
+        <label>Bis<input id="rerun-end" type="date" required></label>
+        <button class="ghost" type="submit">Neuen Bericht erstellen</button>
+      </form>
     </div>
     <div class="placeholder" id="placeholder">Wähle links ein Datum, um den Bericht zu sehen.</div>
     <iframe id="report" title="Bericht" hidden></iframe>
@@ -214,6 +221,7 @@ $("tree-filter").addEventListener("input", renderTree);
 function show(coin, report) {
   selected = {...report, coin};
   $("placeholder").hidden = true;
+  if ($("detail-head").hidden) resetPeriod();
   $("detail-head").hidden = false;
   $("detail-meta").replaceChildren(el("b", {textContent: coin.id}), coin.name ? ` (${coin.name})` : "",
     ` · Bericht vom ${de(report.end)} · Zeitraum ${de(report.start)} – ${de(report.end)}`);
@@ -222,12 +230,22 @@ function show(coin, report) {
   frame.src = "/reports/" + encodeURIComponent(report.file);
   renderTree();
 }
-async function startReport(id, days) {
-  try { await api("/api/reports", {id, days}); openCoins.add(id); await refresh(); }
+async function startReport(id, days, start, end) {
+  try { await api("/api/reports", {id, days, start, end}); openCoins.add(id); await refresh(); }
   catch (e) { $("msg").textContent = e.message; $("msg").className = "err"; }
 }
-$("rerun").addEventListener("click", () => {
-  if (selected) startReport(selected.coin.id, Math.round((new Date(selected.end) - new Date(selected.start)) / 864e5));
+// Default period for a new report: the last 60 days up to today (local date).
+const isoDay = d => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+function resetPeriod() {
+  const today = new Date();
+  $("rerun-end").value = $("rerun-end").max = $("rerun-start").max = isoDay(today);
+  $("rerun-start").value = isoDay(new Date(today.getTime() - 60 * 864e5));
+}
+$("rerun").addEventListener("submit", ev => {
+  ev.preventDefault();
+  const start = $("rerun-start").value, end = $("rerun-end").value;
+  if (start >= end) { $("msg").textContent = "Der Anfang muss vor dem Ende liegen"; $("msg").className = "err"; return; }
+  if (selected) startReport(selected.coin.id, 60, start, end);
 });
 
 // --- jobs and refresh --------------------------------------------------------

@@ -112,3 +112,13 @@ def test_unreachable_coin_list_is_an_error_message(tmp_path):
     with mock.patch.object(cs, "fetch_coin_universe", side_effect=cs.SourceError("offline")):
         status, body = call(web.Library(tmp_path), "GET", "/api/universe")
     assert status == 502 and "offline" in json.loads(body)["error"]
+
+
+def test_report_with_chosen_period(library):
+    with mock.patch.object(library, "_queue"):
+        status, body = call(library, "POST", "/api/reports",
+                            {"id": "QNT", "start": "2026-07-01", "end": "2026-09-30", "days": 60})
+        assert status == 201
+        assert (json.loads(body)["job"]["start"], json.loads(body)["job"]["end"]) == ("2026-07-01", "2026-09-30")
+        status, body = call(library, "POST", "/api/reports", {"id": "QNT", "start": "2026-10-01", "end": "2026-09-30"})
+        assert status == 400 and "Start" in json.loads(body)["error"]
