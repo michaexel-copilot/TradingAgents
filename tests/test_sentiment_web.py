@@ -18,10 +18,12 @@ BUBBLES = [
     {"symbol": "ARB", "name": "Arbitrum", "rank": 60, "stable": False},
     {"symbol": "QNT", "name": "Quant Fork", "rank": 900},  # same ticker, smaller coin
     {"symbol": "", "name": "broken", "rank": 5},
+    {"symbol": "USDT", "name": "Tether", "rank": 3},  # stable by the known list
+    {"symbol": "XYZUSD", "name": "Some Dollar", "rank": 40, "stable": True},  # stable by the flag
 ]
 
 
-def test_cryptobubbles_one_entry_per_ticker_by_rank():
+def test_cryptobubbles_one_entry_per_ticker_by_rank_without_stablecoins():
     coins = cs.parse_cryptobubbles(BUBBLES)
     assert [(c["id"], c["name"], c["rank"]) for c in coins] == [
         ("BTC", "Bitcoin", 1), ("ARB", "Arbitrum", 60), ("QNT", "Quant", 120)]

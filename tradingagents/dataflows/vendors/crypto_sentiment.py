@@ -312,9 +312,20 @@ def social_snapshot(coin: str, end: date) -> dict[str, str]:
 # The list behind the bubbles on cryptobubbles.net: the top 1000 coins by market cap.
 CRYPTOBUBBLES_URL = "https://cryptobubbles.net/backend/data/bubbles1000.usd.json"
 
+# Stablecoins have no sentiment cycle worth trading. cryptobubbles marks them
+# with ``stable``; this list catches the large ones when the flag is missing
+# (and in the CoinGecko fallback, which has no flag).
+STABLECOINS = frozenset({
+    "USDT", "USDC", "DAI", "USDE", "USDS", "FDUSD", "TUSD", "PYUSD", "USDD", "FRAX", "BUSD", "USDP",
+    "GUSD", "LUSD", "USD0", "USD1", "RLUSD", "USDG", "USDX", "USDB", "USDY", "USTC", "CRVUSD", "GHO",
+    "SUSD", "SUSDE", "SUSDS", "SDAI", "EURC", "EURS", "EURT", "EURI", "AEUR", "XSGD", "BRZ", "USDF",
+    "DOLA", "MIM", "USDL", "AUSD", "USDTB", "BUIDL", "USYC", "OUSG",
+})
+
 
 def parse_cryptobubbles(data) -> list[dict]:
-    """``[{id, name, rank}]`` from the cryptobubbles JSON, one entry per ticker, by rank."""
+    """``[{id, name, rank}]`` from the cryptobubbles JSON, one entry per ticker, by rank,
+    without stablecoins."""
     rows = data.get("data", []) if isinstance(data, dict) else data
     coins: dict[str, dict] = {}
     for row in rows if isinstance(rows, list) else []:
@@ -325,7 +336,9 @@ def parse_cryptobubbles(data) -> list[dict]:
         rank = row.get("rank")
         if not symbol or not name or not isinstance(rank, int | float):
             continue
-        entry = {"id": symbol, "name": name, "rank": int(rank), "stable": bool(row.get("stable"))}
+        if row.get("stable") or symbol in STABLECOINS:
+            continue
+        entry = {"id": symbol, "name": name, "rank": int(rank)}
         # Two coins can share a ticker; the larger one keeps it.
         if symbol not in coins or entry["rank"] < coins[symbol]["rank"]:
             coins[symbol] = entry
