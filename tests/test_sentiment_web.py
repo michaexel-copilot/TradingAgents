@@ -126,3 +126,19 @@ def test_report_with_chosen_period(library):
         assert (json.loads(body)["job"]["start"], json.loads(body)["job"]["end"]) == ("2026-07-01", "2026-09-30")
         status, body = call(library, "POST", "/api/reports", {"id": "QNT", "start": "2026-10-01", "end": "2026-09-30"})
         assert status == 400 and "Start" in json.loads(body)["error"]
+
+
+def test_state_carries_creation_time_and_version(library):
+    from tradingagents.sentiment_report import REPORT_VERSION
+
+    current = library.folder / "QNT_20260101-20260201_sentiment.html"
+    current.write_text(f'<head><meta name="report-created" content="2026-10-20T11:46:00+02:00">'
+                       f'<meta name="report-version" content="{REPORT_VERSION} (abc1234)"></head>',
+                       encoding="utf-8")
+    reports = {r["file"]: r for r in library.state()["coins"][0]["reports"]}
+    assert reports[current.name]["created"] == "2026-10-20T11:46:00+02:00"
+    assert reports[current.name]["version"] == f"{REPORT_VERSION} (abc1234)"
+    assert not reports[current.name]["outdated"]
+    old = reports["QNT_20260901-20261019_sentiment.html"]  # written before reports were stamped
+    assert old["created"] == "" and old["outdated"]
+    assert library.state()["version"].startswith(REPORT_VERSION)

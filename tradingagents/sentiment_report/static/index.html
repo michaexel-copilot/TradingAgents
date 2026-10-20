@@ -49,6 +49,10 @@ section{display:flex;flex-direction:column;min-height:0;min-width:0}
 .detail-head{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
 .detail-head .meta{font-size:14px}
 .detail-head .meta b{font-family:var(--mono)}
+.detail-head .stamp{display:block;font-size:13px;color:var(--muted)}
+.detail-head .stamp.warn{color:var(--warn)}
+.detail-head .tools{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.detail-head .tools>button{width:auto}
 form.rerun{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
 form.rerun label{flex-direction:column;width:150px}
 form.rerun button{width:auto}
@@ -93,11 +97,14 @@ iframe{flex:1;border:0;width:100%;background:var(--bg)}
   <section>
     <div class="detail-head" id="detail-head" hidden>
       <div class="meta" id="detail-meta"></div>
-      <form class="rerun" id="rerun">
-        <label>Von<input id="rerun-start" type="date" required></label>
-        <label>Bis<input id="rerun-end" type="date" required></label>
-        <button class="ghost" type="submit">Bericht erstellen</button>
-      </form>
+      <div class="tools">
+        <button class="ghost" type="button" id="update" hidden>Mit neuester Version aktualisieren</button>
+        <form class="rerun" id="rerun">
+          <label>Von<input id="rerun-start" type="date" required></label>
+          <label>Bis<input id="rerun-end" type="date" required></label>
+          <button class="ghost" type="submit">Bericht erstellen</button>
+        </form>
+      </div>
     </div>
     <div class="placeholder" id="placeholder">Wähle links ein Datum, um den Bericht zu sehen.</div>
     <iframe id="report" title="Bericht" hidden></iframe>
@@ -112,6 +119,7 @@ const el = (tag, props = {}, ...children) => {
   return node;
 };
 const de = iso => iso.split("-").reverse().join(".");
+const deTime = iso => iso ? `${de(iso.slice(0, 10))} um ${iso.slice(11, 16)} Uhr` : "";
 let state = {coins: [], jobs: []}, universe = [], selected = null, openCoins = new Set(), polling = null;
 
 async function api(path, body) {
@@ -225,11 +233,17 @@ function show(coin, report) {
   $("detail-meta").replaceChildren(el("b", {textContent: coin.id}), coin.name ? ` (${coin.name})` : "",
     report ? ` · Bericht vom ${de(report.end)} · Zeitraum ${de(report.start)} – ${de(report.end)}`
            : " · noch kein Bericht");
+  if (report) $("detail-meta").append(el("span", {
+    className: "stamp" + (report.outdated ? " warn" : ""),
+    textContent: (report.created ? `Erstellt am ${deTime(report.created)} · Version ${report.version}`
+                                 : "Erstellt mit einer älteren Version ohne Versionsangabe")
+                 + (report.outdated ? ` · aktuelle Version ${state.version}` : "")}));
+  $("update").hidden = !report;
   const frame = $("report");
   frame.hidden = !report;
   $("placeholder").hidden = !!report;
   $("placeholder").textContent = "Noch kein Bericht. Wähle oben Von und Bis und klicke auf „Bericht erstellen“.";
-  if (report) frame.src = "/reports/" + encodeURIComponent(report.file);
+  if (report) frame.src = "/reports/" + encodeURIComponent(report.file) + "?v=" + encodeURIComponent(report.created);
   else frame.removeAttribute("src");
   renderTree();
 }
@@ -244,6 +258,10 @@ function resetPeriod() {
   $("rerun-end").value = $("rerun-end").max = $("rerun-start").max = isoDay(today);
   $("rerun-start").value = isoDay(new Date(today.getTime() - 60 * 864e5));
 }
+// Same coin and period again, made by the software as it is now; replaces the report file.
+$("update").addEventListener("click", () => {
+  if (selected?.file) startReport(selected.coin.id, 60, selected.start, selected.end);
+});
 $("rerun").addEventListener("submit", ev => {
   ev.preventDefault();
   const start = $("rerun-start").value, end = $("rerun-end").value;
@@ -264,6 +282,12 @@ async function refresh() {
   if (selected && !selected.file) {
     const coin = state.coins.find(c => c.id === selected.coin.id);
     if (coin && coin.reports.length) return show(coin, coin.reports.at(-1)), refresh();
+  }
+  // A shown report that was just updated is reloaded.
+  if (selected?.file) {
+    const coin = state.coins.find(c => c.id === selected.coin.id);
+    const now = coin?.reports.find(r => r.file === selected.file);
+    if (now && now.created !== selected.created) show(coin, now);
   }
   renderTree();
   renderJobs();

@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from functools import cache
 from pathlib import Path
 
 import pandas as pd
@@ -30,8 +32,23 @@ from tradingagents.sentiment_report.signals import (
 
 logger = logging.getLogger(__name__)
 
+# Version of the report logic, raised with every change to data, rules or layout, so the
+# web page can tell which reports were made by an older version.
+REPORT_VERSION = "1.0"
+
 # Days fetched before the window so the 14- and 20-day averages are warm on day one.
 WARMUP_DAYS = 40
+
+
+@cache
+def software_version() -> str:
+    """The report version plus the git commit of the checkout when there is one."""
+    try:
+        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+                                cwd=Path(__file__).parent, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        commit = ""
+    return f"{REPORT_VERSION} ({commit})" if commit else REPORT_VERSION
 
 
 @dataclass
@@ -46,6 +63,8 @@ class Report:
     snapshot: dict[str, str] = field(default_factory=dict)
     narrative: str | None = None
     narrative_note: str = ""
+    created: datetime = field(default_factory=lambda: datetime.now().astimezone().replace(microsecond=0))
+    version: str = field(default_factory=software_version)
 
     @property
     def window(self) -> pd.DataFrame:
@@ -106,6 +125,8 @@ def llm_payload(report: Report) -> dict:
     close = window["close"]
     return {
         "coin": report.coin,
+        "erstellt": report.created.isoformat(),
+        "software_version": report.version,
         "zeitraum": [report.start.isoformat(), report.end.isoformat()],
         "kennzahlen": {
             "erster_schluss": _num(close.iloc[0]),

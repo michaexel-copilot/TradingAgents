@@ -151,10 +151,12 @@ def render_html(report) -> str:
 
     return f"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(title)}</title>
+<meta name="report-created" content="{report.created.isoformat()}"><meta name="report-version" content="{escape(report.version)}">
 <style>{CSS}</style></head><body><div class="wrap">
 <header style="display:flex;flex-direction:column;gap:12px">
 <div class="eyebrow">Sentiment-Analyse · {escape(report.coin)} · {report.start:%d.%m.%Y} bis {report.end:%d.%m.%Y}</div>
-<h1>{escape(title)}</h1><p style="font-size:18px">{escape(summary)}</p></header>
+<h1>{escape(title)}</h1><p style="font-size:18px">{escape(summary)}</p>
+<p class="muted">Erstellt am {report.created:%d.%m.%Y um %H:%M} Uhr · Software-Version {escape(report.version)}</p></header>
 <div class="cells">
 <div class="cell"><span>Schluss {report.end:%d.%m.%Y}</span><b>{escape(_fmt_price(last))}</b><span>{100 * (last / first - 1):+.0f} % im Zeitraum</span></div>
 <div class="cell"><span>Hoch ({close.idxmax():%d.%m.})</span><b>{escape(_fmt_price(close.max()))}</b><span>{100 * (last / close.max() - 1):+.0f} % vom Hoch</span></div>
@@ -178,5 +180,5 @@ def render_html(report) -> str:
 </ul><p class="muted">Fehlt eine Quelle, entfällt nur ihre Bedingung. Funding in Prozent je 8 Stunden, Tagesmittel.</p></section>
 <section><h2>Datenquellen</h2><div class="tbl"><table><thead><tr><th>Daten</th><th>Quelle</th></tr></thead>
 <tbody>{coverage}</tbody></table></div></section>
-<p class="note">Erstellt mit TradingAgents sentiment_report. Keine Anlageberatung. Signale sind rückblickend berechnet und keine Garantie für die Zukunft.</p>
+<p class="note">Erstellt am {report.created:%d.%m.%Y um %H:%M} Uhr mit TradingAgents sentiment_report, Version {escape(report.version)}. Keine Anlageberatung. Signale sind rückblickend berechnet und keine Garantie für die Zukunft.</p>
 </div></body></html>"""

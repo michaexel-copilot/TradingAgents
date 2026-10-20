@@ -296,3 +296,16 @@ def test_drawdown_uses_daily_lows_when_present():
     buy = build_report("QNT", START, END, frame=frame, llm_backend="none").signals[0]
     assert buy.drawdown_day == pd.Timestamp("2026-09-24")
     assert buy.max_drawdown_pct == pytest.approx(100 * (66.0 / 73.78 - 1))
+
+
+def test_report_carries_creation_time_and_software_version(tmp_path):
+    from tradingagents.sentiment_report import REPORT_VERSION
+
+    made = report()
+    assert made.version.startswith(REPORT_VERSION)
+    html_path, json_path = save_report(made, tmp_path)
+    html = html_path.read_text(encoding="utf-8")
+    assert f'<meta name="report-version" content="{made.version}">' in html
+    assert f"Erstellt am {made.created:%d.%m.%Y um %H:%M} Uhr · Software-Version {made.version}" in html
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    assert data["erstellt"] == made.created.isoformat() and data["software_version"] == made.version

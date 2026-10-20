@@ -23,17 +23,29 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from tradingagents.dataflows.vendors import crypto_sentiment as sources
+from tradingagents.sentiment_report import REPORT_VERSION, software_version
 
 logger = logging.getLogger(__name__)
 
 COIN_ID = re.compile(r"^[A-Z0-9]{1,15}$")
 REPORT_FILE = re.compile(r"^([A-Z0-9]{1,15})_(\d{8})-(\d{8})_sentiment\.html$")
+REPORT_META = re.compile(r'<meta name="report-(created|version)" content="([^"]*)">')
 UNIVERSE_TTL_SECONDS = 6 * 3600
 PAGE = Path(__file__).with_name("static") / "index.html"
 
 
 def _day(stamp: str) -> str:
     return datetime.strptime(stamp, "%Y%m%d").date().isoformat()
+
+
+def _stamp(path: Path) -> dict:
+    """Creation time and software version from a report's head; empty for older reports."""
+    try:
+        with path.open(encoding="utf-8", errors="replace") as file:
+            head = file.read(4000)
+    except OSError:
+        return {}
+    return dict(REPORT_META.findall(head))
 
 
 class Library:
@@ -80,8 +92,11 @@ class Library:
         for path in self.folder.glob("*_sentiment.html"):
             match = REPORT_FILE.match(path.name)
             if match:
+                stamp = _stamp(path)
+                version = stamp.get("version", "")
                 found.append({"coin": match[1], "start": _day(match[2]), "end": _day(match[3]),
-                              "file": path.name})
+                              "file": path.name, "created": stamp.get("created", ""), "version": version,
+                              "outdated": version.split(" ")[0] != REPORT_VERSION})
         return found
 
     def _report_coins(self) -> set[str]:
@@ -99,7 +114,8 @@ class Library:
             coins[report["coin"]]["reports"].append(report)
         for coin in coins.values():
             coin["reports"].sort(key=lambda r: (r["end"], r["start"]))
-        return {"coins": sorted(coins.values(), key=lambda c: c["id"]), "jobs": self.jobs[-20:]}
+        return {"coins": sorted(coins.values(), key=lambda c: c["id"]), "jobs": self.jobs[-20:],
+                "version": software_version()}
 
     def universe(self) -> dict:
         """The cryptobubbles list without the coins already in the analysis."""
