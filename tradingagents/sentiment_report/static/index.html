@@ -28,7 +28,10 @@ button:disabled{opacity:.5;cursor:default}
 .check{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
 .check input{width:auto}
 .actions{display:flex;flex-direction:column;gap:8px;padding-top:19px}
-#msg{font-size:13px;min-height:18px}
+#msg{font-size:13px}
+#msg:empty,#jobs:empty{display:none}
+#add-box>summary{cursor:pointer;font-weight:600;color:var(--accent);width:max-content;padding:2px 0}
+#add-box[open]>summary{margin-bottom:10px}
 .err{color:var(--err)}.ok{color:var(--ok)}.warn{color:var(--warn)}
 main{flex:1;display:grid;grid-template-columns:300px 1fr;min-height:0}
 nav{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
@@ -87,6 +90,8 @@ iframe{flex:1;border:0;width:100%;background:var(--bg)}
 <body>
 <header>
   <h1>Sentiment-Berichte</h1>
+  <details id="add-box" open>
+  <summary>Coin suchen und anlegen</summary>
   <form id="add">
     <label>Coin suchen (Name oder ID)
       <input id="search" type="search" placeholder="z.B. QNT oder Quant" autocomplete="off">
@@ -101,9 +106,10 @@ iframe{flex:1;border:0;width:100%;background:var(--bg)}
         <label>Coin-Name<input id="coin-name" required maxlength="80" placeholder="Quant"></label>
       </div>
       <button type="submit">Coin anlegen</button>
-      <div id="msg"></div>
     </div>
   </form>
+  </details>
+  <div id="msg"></div>
   <div id="jobs"></div>
 </header>
 <main>
@@ -385,6 +391,11 @@ async function refresh() {
   if (busy && !polling) polling = setInterval(refresh, 3000);
   if (!busy && polling) { clearInterval(polling); polling = null; }
 }
+// The search box folds away for more room; the page remembers it per browser.
+try { if (localStorage.getItem("addBoxOpen") === "0") $("add-box").open = false; } catch (e) {}
+$("add-box").addEventListener("toggle", () => {
+  try { localStorage.setItem("addBoxOpen", $("add-box").open ? "1" : "0"); } catch (e) {}
+});
 refresh().then(loadUniverse).then(refresh);
 </script>
 </body>
