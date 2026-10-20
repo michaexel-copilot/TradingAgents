@@ -93,8 +93,13 @@ class Library:
         return {"id": coin_id, "name": name}
 
     def _reports(self) -> list[dict]:
+        return self.scan(self.folder)
+
+    @staticmethod
+    def scan(folder: Path) -> list[dict]:
+        """The reports in a folder with period, creation time, version and whether it is outdated."""
         found = []
-        for path in self.folder.glob("*_sentiment.html"):
+        for path in folder.glob("*_sentiment.html"):
             match = REPORT_FILE.match(path.name)
             if match:
                 stamp = _stamp(path)

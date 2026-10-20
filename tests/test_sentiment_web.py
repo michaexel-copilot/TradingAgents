@@ -3,6 +3,7 @@
 import io
 import json
 import time
+from datetime import date
 from unittest import mock
 
 import pytest
@@ -203,3 +204,22 @@ def test_delete_report_removes_html_and_json_and_keeps_the_coin(library):
     assert [c["id"] for c in coins] == ["QNT"] and coins[0]["reports"] == []
     assert call(library, "POST", "/api/reports/delete", {"file": "../coins.json"})[0] == 400
     assert call(library, "POST", "/api/reports/delete", {"file": html.name})[0] == 400  # already gone
+
+
+def test_refresh_reruns_only_outdated_reports(library):
+    from tradingagents.sentiment_report import REPORT_VERSION, refresh
+
+    current = library.folder / "ARB_20260801-20260926_sentiment.html"
+    current.write_text(f'<meta name="report-version" content="{REPORT_VERSION} (x)">', encoding="utf-8")
+    lines = []
+    assert refresh.refresh(library.folder, dry_run=True, say=lines.append) == 0
+    assert len(lines) == 4 and "3 veraltete" in lines[0] and "QNT 2026-07-01 bis 2026-09-30" in lines[1]
+
+    made = mock.Mock(signals=[], stance=("Abwarten", ""))
+    with mock.patch("tradingagents.sentiment_report.build_report",
+                    side_effect=[made, cs.SourceError("weg"), made]) as build, \
+         mock.patch("tradingagents.sentiment_report.save_report") as save:
+        failed = refresh.refresh(library.folder, llm_backend="none", coins=["qnt"], pause=0, say=lines.append)
+    assert failed == 1 and build.call_count == 3 and save.call_count == 2
+    assert [c.args[1:] for c in build.call_args_list][0] == (date(2026, 7, 1), date(2026, 9, 30))
+    assert refresh.outdated_reports(library.folder, ["ARB"]) == []

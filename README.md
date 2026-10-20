@@ -382,6 +382,8 @@ Sources that are unreachable or need a key are listed as missing in the report; 
 
 `uv run tradingagents sentiment-web` opens a local page (http://127.0.0.1:8765) over the saved reports: a tree by first letter, coin and report end date on the left, the selected report on the right, and above them a form that adds a coin from the cryptobubbles.net top 1000 (grouped by rank in packets of 100, searchable by name or ticker, coins already analysed left out). A new coin opens on an empty page; its first report starts once you pick the period (default: the last 60 days).
 
+`uv run tradingagents sentiment-refresh` re-runs every report made by an older software version, for the same coin and period (`--dry-run` only lists them, coin names limit the run, e.g. `sentiment-refresh NEAR QNT`; `--llm none` skips the written assessment and is much faster).
+
 ## Evaluating decisions over time
 
 One run gives one decision, which cannot tell you whether the system decides well. `run_backtest` runs the same pipeline over a grid of tickers and dates, writes to a memory log of its own, and scores the decisions whose holding window has since traded.

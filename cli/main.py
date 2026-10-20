@@ -203,6 +203,27 @@ def sentiment_web(
           say=lambda line: console.print(line, markup=False, highlight=False))
 
 
+@app.command("sentiment-refresh")
+def sentiment_refresh(
+    coins: Annotated[list[str] | None, typer.Argument(help="Only these coins, e.g. NEAR QNT")] = None,
+    dry_run: bool = typer.Option(False, "--dry-run", help="Only list the outdated reports"),
+    llm: str = typer.Option("auto", "--llm", envvar="SENTIMENT_LLM", help="Assessment backend (as for `sentiment`)"),
+    model: str = typer.Option(None, "--model", help="Model for the assessment"),
+    out: str = typer.Option(None, "--out", help="Report folder (default: <results_dir>/sentiment)"),
+    pause: float = typer.Option(2.0, "--pause", help="Seconds between two reports"),
+):
+    """Re-run all reports made by an older software version, same coin and period."""
+    from pathlib import Path
+
+    from tradingagents.sentiment_report.__main__ import default_out_dir
+    from tradingagents.sentiment_report.refresh import refresh
+
+    failed = refresh(Path(out) if out else default_out_dir(), llm_backend=llm, llm_model=model, coins=coins,
+                     dry_run=dry_run, pause=pause,
+                     say=lambda line: console.print(line, markup=False, highlight=False))
+    raise typer.Exit(code=1 if failed else 0)
+
+
 # The plans `login` and `logout` take: the providers signed in to, not keyed.
 Plan = StrEnum("Plan", {name: name for name in SIGNED_IN_PROVIDERS})
 
