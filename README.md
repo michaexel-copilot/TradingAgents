@@ -363,7 +363,7 @@ _, decision = ta.propagate("NVDA", "2026-09-01")
 
 ## Coin sentiment report
 
-`tradingagents sentiment` writes a report on one coin and period: daily price and volume, funding rate, open interest and trading volume of the perpetual, the market-wide Fear & Greed index and, with a free `SANTIMENT_API_KEY`, social volume, weighted sentiment and active addresses. Rule-based buy and sell signals are marked on a chart and scored after the fact, and an optional written assessment explains them. The report is one HTML page plus the data as JSON, under `<results_dir>/sentiment`.
+`tradingagents sentiment` writes a report on one coin and period: daily price and volume, funding rate, open interest and trading volume of the perpetual, the market-wide Fear & Greed index and, with a free `SANTIMENT_API_KEY`, social volume, weighted sentiment, active addresses, exchange in- and outflows and whale transactions. Rule-based buy and sell signals are marked on a chart and scored after the fact, and an optional written assessment explains them. The report is one HTML page plus the data as JSON, under `<results_dir>/sentiment`.
 
 ```bash
 uv sync                                                 # once: creates .venv and installs

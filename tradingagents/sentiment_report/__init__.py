@@ -96,7 +96,8 @@ def _num(value, digits=4):
 def llm_payload(report: Report) -> dict:
     window = report.window
     columns = [c for c in ("close", "volume", "volume_ratio", "perp_volume", "perp_spot", "perp_spot_ratio", "funding", "oi_usd", "fng", "social_volume",
-                           "social_ratio", "sentiment", "active_addresses", "rsi") if c in window]
+                           "social_ratio", "sentiment", "active_addresses", "exchange_inflow",
+                           "exchange_outflow", "inflow_ratio", "whale_transactions", "whale_ratio", "rsi") if c in window]
     daily = [
         {"datum": day.date().isoformat(), **{c: _num(row[c]) for c in columns}}
         for day, row in window.iterrows()

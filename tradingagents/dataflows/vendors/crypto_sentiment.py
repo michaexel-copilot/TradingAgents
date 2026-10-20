@@ -10,7 +10,8 @@ failing. Only free endpoints are used; Santiment needs a free API key.
   perp volume    Bybit linear perpetual daily turnover in USD, Binance as fallback
   fear & greed   alternative.me (whole crypto market, mostly Bitcoin)
   social/onchain Santiment GraphQL (``SANTIMENT_API_KEY``): social volume,
-                 weighted sentiment, daily active addresses
+                 weighted sentiment, daily active addresses, exchange in- and
+                 outflows, whale transactions (>= 100k USD)
 """
 
 from __future__ import annotations
@@ -267,6 +268,11 @@ SANTIMENT_METRICS = {
     "social_volume_total": "social_volume",
     "sentiment_weighted_total": "sentiment",
     "daily_active_addresses": "active_addresses",
+    # Coins moved onto / off exchange wallets, in coins. Restricted on the free
+    # plan (no recent 30 days); a refused metric is listed, the others still load.
+    "exchange_inflow": "exchange_inflow",
+    "exchange_outflow": "exchange_outflow",
+    "whale_transaction_count_100k_usd_to_inf": "whale_transactions",
 }
 
 

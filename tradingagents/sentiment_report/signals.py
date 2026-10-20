@@ -8,7 +8,7 @@ whatever columns are present; a missing source only removes its condition.
 
 Input frame columns (daily, all optional except ``close``): close, volume,
 funding (percent per 8h), oi_usd, perp_volume (USD), fng, social_volume, sentiment,
-active_addresses.
+active_addresses, exchange_inflow, exchange_outflow (coins), whale_transactions.
 """
 
 from __future__ import annotations
@@ -33,6 +33,10 @@ class Thresholds:
     oi_multiple: float = 3.0         # open interest vs. 7 days earlier
     hot_funding: float = 0.05        # percent per 8h
     perp_spot_jump: float = 2.0      # perp/spot volume ratio vs. its 14-day mean: leverage takes over
+    inflow_jump: float = 3.0         # coins sent to exchanges vs. 14-day mean: holders get ready to sell
+    outflow_days: int = 3            # net outflow on this many of the last 5 days confirms a buy
+    whale_jump: float = 3.0          # whale transactions vs. 14-day mean ...
+    whale_rally: float = 1.3         # ... after this 7-day rise: big holders active into strength
     rsi_hot: float = 80.0
     extension_hot: float = 1.3       # close vs. 20-day average, together with rsi_hot
     parabolic_7d: float = 2.5        # close vs. 7 days earlier
@@ -98,6 +102,14 @@ def add_features(df: pd.DataFrame, t: Thresholds | None = None) -> pd.DataFrame:
         # coin, so the rule watches the ratio against its own recent mean.
         out["perp_spot"] = out["perp_volume"] / out["volume"].replace(0, float("nan"))
         out["perp_spot_ratio"] = _ratio_to_past(out["perp_spot"], 14)
+    if "exchange_inflow" in out:
+        out["inflow_ratio"] = _ratio_to_past(out["exchange_inflow"], 14)
+        if "exchange_outflow" in out:
+            net = out["exchange_inflow"] - out["exchange_outflow"]
+            # Days of the last five on which more coins left exchanges than arrived.
+            out["outflow_days"] = (net < 0).astype(float).where(net.notna()).rolling(5, min_periods=3).sum()
+    if "whale_transactions" in out:
+        out["whale_ratio"] = _ratio_to_past(out["whale_transactions"], 14)
     return out
 
 
@@ -107,8 +119,16 @@ def _value(row: pd.Series, column: str):
 
 
 def _crowd_checks(row: pd.Series, t: Thresholds) -> tuple[bool, list[str]]:
-    """Social volume quiet and funding not crowded long; missing data passes."""
+    """Social volume quiet, funding not crowded long, no rush of coins to the
+    exchanges; missing data passes. Steady exchange outflows add a confirmation."""
     reasons, ok = [], True
+    inflow = _value(row, "inflow_ratio")
+    if inflow is not None and inflow >= t.inflow_jump:
+        ok = False
+        reasons.append(f"Börsenzufluss {inflow:.1f}× Schnitt (Verkaufsdruck)")
+    outflow_days = _value(row, "outflow_days")
+    if outflow_days is not None and outflow_days >= t.outflow_days:
+        reasons.append(f"bestätigt: Netto-Abfluss von Börsen an {outflow_days:.0f} der letzten 5 Tage")
     social = _value(row, "social_ratio")
     if social is not None:
         ok &= social < t.quiet_social
@@ -165,6 +185,13 @@ def detect_day(row: pd.Series, onchain_streak: int, t: Thresholds) -> list[Signa
     perp_spot, perp_jump = _value(row, "perp_spot"), _value(row, "perp_spot_ratio")
     if perp_jump is not None and perp_jump >= t.perp_spot_jump:
         hype.append(f"Perp-Volumen {perp_spot:.1f}× Spot ({perp_jump:.1f}× üblich, Hebel treibt)")
+    inflow = _value(row, "inflow_ratio")
+    if inflow is not None and inflow >= t.inflow_jump:
+        hype.append(f"Börsenzufluss {inflow:.1f}× Schnitt (Halter schicken Coins zum Verkauf)")
+    whales = _value(row, "whale_ratio")
+    rise = _value(row, "ret_7d")
+    if whales is not None and whales >= t.whale_jump and rise is not None and rise >= t.whale_rally:
+        hype.append(f"Wal-Transaktionen {whales:.1f}× Schnitt nach +{100 * (rise - 1):.0f} % in 7 Tagen")
     funding = _value(row, "funding")
     if funding is not None and funding >= t.hot_funding:
         hype.append(f"Funding {funding:+.3f} % (Longs überhitzt)")

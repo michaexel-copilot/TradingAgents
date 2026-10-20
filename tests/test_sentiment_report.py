@@ -220,3 +220,28 @@ def test_perp_volume_jump_counts_toward_the_sell():
     row["rsi"], row["extension"] = 85.0, 1.4
     sells = [s for s in detect_day(row, 0, Thresholds()) if s.kind == "sell"]
     assert sells and any("Perp-Volumen 6.0× Spot" in r for r in sells[0].reasons)
+
+
+def test_exchange_inflow_blocks_buy_and_counts_toward_sell():
+    frame = qnt_frame().assign(exchange_inflow=1000.0, exchange_outflow=1200.0)
+    features = add_features(frame)
+    row = features.loc["2026-09-22"].copy()
+    assert row["outflow_days"] == 5  # outflow beat inflow on every recent day
+    buy = [s for s in detect_day(row, 0, Thresholds()) if s.kind == "buy"]
+    assert buy and any("Netto-Abfluss" in r for r in buy[0].reasons)
+    row["inflow_ratio"] = 4.0
+    row["rsi"], row["extension"] = 85.0, 1.4
+    signals = detect_day(row, 0, Thresholds())
+    assert not [s for s in signals if s.kind == "buy"]
+    sells = [s for s in signals if s.kind == "sell"]
+    assert sells and any("Börsenzufluss 4.0×" in r for r in sells[0].reasons)
+
+
+def test_whale_spike_counts_only_after_a_rally():
+    row = add_features(qnt_frame().assign(whale_transactions=10.0)).loc["2026-10-08"].copy()
+    row["whale_ratio"], row["rsi"], row["extension"] = 4.0, 85.0, 1.4
+    row["ret_7d"] = 1.0  # flat week: whales alone are no euphoria
+    assert not [s for s in detect_day(row, 0, Thresholds()) if s.kind == "sell"]
+    row["ret_7d"] = 1.5
+    sells = [s for s in detect_day(row, 0, Thresholds()) if s.kind == "sell"]
+    assert sells and any("Wal-Transaktionen 4.0×" in r for r in sells[0].reasons)
