@@ -10,6 +10,7 @@
 @media (prefers-color-scheme:dark){:root{--bg:#0f151b;--panel:#161e26;--ink:#e6ecf1;--muted:#9aa7b3;--line:#2a3540;
 --accent:#7d9bff;--accent-bg:#1d2740;--ok:#4cc58f;--err:#f07a63;--warn:#e0a24a;color-scheme:dark}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
 header{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;flex-direction:column;gap:10px}
@@ -113,8 +114,7 @@ iframe{flex:1;border:0;width:100%;background:var(--bg)}
   <section>
     <div class="detail-head" id="detail-head" hidden>
       <div class="meta" id="detail-meta"></div>
-      <div class="tools">
-        <button class="ghost" type="button" id="update" hidden>Mit neuester Version aktualisieren</button>
+      <div class="tools" id="tools">
         <form class="rerun" id="rerun">
           <label>Von<input id="rerun-start" type="date" required></label>
           <label>Bis<input id="rerun-end" type="date" required></label>
@@ -246,9 +246,10 @@ function renderTree() {
 }
 $("tree-filter").addEventListener("input", renderTree);
 
+const signature = coin => (coin.reports || []).map(r => r.file + r.created).join("|");
 // A coin's detail: one report, or with report null the coin's overview (reports and signals).
 function show(coin, report) {
-  selected = {...(report || {}), coin, count: coin.reports?.length || 0};
+  selected = {...(report || {}), coin, count: coin.reports?.length || 0, sig: signature(coin)};
   openCoins.add(coin.id);
   if ($("detail-head").hidden) resetPeriod();
   $("detail-head").hidden = false;
@@ -260,7 +261,7 @@ function show(coin, report) {
     textContent: (report.created ? `Erstellt am ${deTime(report.created)} · Version ${report.version}`
                                  : "Erstellt mit einer älteren Version ohne Versionsangabe")
                  + (report.outdated ? ` · aktuelle Version ${state.version}` : "")}));
-  $("update").hidden = !report;
+  $("tools").hidden = !!report;  // new and updated reports are managed in the overview
   const frame = $("report");
   frame.hidden = !report;
   $("placeholder").hidden = true;
@@ -306,11 +307,18 @@ async function loadOverview(coin) {
     });
     return b;
   };
-  const reports = table(["Zeitraum", "Erstellt", "Version", "", ""], data.reports.slice().reverse().map(r => el("tr", {},
+  // Same coin and period again, made by the software as it is now; replaces the report file.
+  const update = r => {
+    const b = el("button", {type: "button", className: "link", textContent: "aktualisieren",
+                            title: "Mit der neuesten Software-Version neu erstellen"});
+    b.addEventListener("click", () => { b.disabled = true; b.textContent = "läuft …"; startReport(coin.id, 60, r.start, r.end); });
+    return b;
+  };
+  const reports = table(["Zeitraum", "Erstellt", "Version", "", "", ""], data.reports.slice().reverse().map(r => el("tr", {},
     el("td", {textContent: `${de(r.start)} – ${de(r.end)}`}),
     el("td", {textContent: r.created ? deTime(r.created) : "–"}),
     el("td", {className: r.outdated ? "warn" : "", textContent: (r.version || "ohne Angabe") + (r.outdated ? " (veraltet)" : "")}),
-    el("td", {}, open(r)), el("td", {}, remove(r)))));
+    el("td", {}, open(r)), el("td", {}, update(r)), el("td", {}, remove(r)))));
   const byFile = Object.fromEntries(data.reports.map(r => [r.file, r]));
   const signals = data.signals.length ? table(
     ["Datum", "Signal", "Kurs", "Max. Gewinn", "Max. Drawdown", "Tag Drawdown", "Stand heute", "Bericht"],
@@ -343,10 +351,6 @@ function resetPeriod() {
   $("rerun-end").value = $("rerun-end").max = $("rerun-start").max = isoDay(today);
   $("rerun-start").value = isoDay(new Date(today.getTime() - 60 * 864e5));
 }
-// Same coin and period again, made by the software as it is now; replaces the report file.
-$("update").addEventListener("click", () => {
-  if (selected?.file) startReport(selected.coin.id, 60, selected.start, selected.end);
-});
 $("rerun").addEventListener("submit", ev => {
   ev.preventDefault();
   const start = $("rerun-start").value, end = $("rerun-end").value;
@@ -365,9 +369,9 @@ async function refresh() {
   state = await api("/api/state");
   if (selected && !selected.file) {
     const coin = state.coins.find(c => c.id === selected.coin.id);
-    // The first report of a new coin opens itself; a further one refreshes the overview.
-    if (coin && coin.reports.length > selected.count)
-      return show(coin, selected.count ? null : coin.reports.at(-1)), refresh();
+    // The first report of a new coin opens itself; any other change refreshes the overview.
+    if (coin && !selected.count && coin.reports.length) return show(coin, coin.reports.at(-1)), refresh();
+    if (coin && signature(coin) !== selected.sig) show(coin, null);
   }
   // A shown report that was just updated is reloaded.
   if (selected?.file) {
