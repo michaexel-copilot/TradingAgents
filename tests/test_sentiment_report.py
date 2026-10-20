@@ -194,8 +194,29 @@ def test_missing_sources_listed_in_coverage():
     fail = mock.Mock(side_effect=cs.SourceError("blocked"))
     with mock.patch.object(cs, "fetch_price", return_value=(price, "Yahoo Finance")), \
          mock.patch.object(cs, "fetch_funding", fail), mock.patch.object(cs, "fetch_open_interest", fail), \
+         mock.patch.object(cs, "fetch_perp_volume", fail), \
          mock.patch.object(cs, "fetch_fear_greed", fail), mock.patch.object(cs, "fetch_santiment", fail):
         r = build_report("QNT", START, END, llm_backend="none")
     assert r.coverage["Kurs & Volumen"] == "Yahoo Finance"
     assert r.coverage["Funding Rate"].startswith("fehlt")
     assert any(s.kind == "sell" for s in r.signals)
+
+
+def test_bybit_perp_volume_is_daily_usd_turnover():
+    rows = [[str(_ms("2026-09-27")), "99", "374", "95", "286", "4000000", "1100000000"],
+            [str(_ms("2026-09-26")), "98", "160", "97", "151", "900000", "120000000"]]
+    with mock.patch.object(cs, "_get_json", return_value={"retCode": 0, "result": {"list": rows}}):
+        series = cs.fetch_perp_volume_bybit("QNT", date(2026, 9, 26), date(2026, 9, 27))
+    assert series.loc["2026-09-27"] == 1.1e9 and series.index.is_monotonic_increasing
+
+
+def test_perp_volume_jump_counts_toward_the_sell():
+    frame = qnt_frame()
+    frame["perp_volume"] = frame["volume"] * 2
+    features = add_features(frame)
+    row = features.loc["2026-10-08"].copy()
+    assert row["perp_spot_ratio"] == pytest.approx(1.0)
+    row["perp_spot"], row["perp_spot_ratio"] = 6.0, 3.0
+    row["rsi"], row["extension"] = 85.0, 1.4
+    sells = [s for s in detect_day(row, 0, Thresholds()) if s.kind == "sell"]
+    assert sells and any("Perp-Volumen 6.0× Spot" in r for r in sells[0].reasons)

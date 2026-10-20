@@ -7,7 +7,8 @@ and the exit came with the social and leverage euphoria. Every rule works on
 whatever columns are present; a missing source only removes its condition.
 
 Input frame columns (daily, all optional except ``close``): close, volume,
-funding (percent per 8h), oi_usd, fng, social_volume, sentiment, active_addresses.
+funding (percent per 8h), oi_usd, perp_volume (USD), fng, social_volume, sentiment,
+active_addresses.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ class Thresholds:
     hype_social: float = 4.0         # social volume spike that marks euphoria
     oi_multiple: float = 3.0         # open interest vs. 7 days earlier
     hot_funding: float = 0.05        # percent per 8h
+    perp_spot_jump: float = 2.0      # perp/spot volume ratio vs. its 14-day mean: leverage takes over
     rsi_hot: float = 80.0
     extension_hot: float = 1.3       # close vs. 20-day average, together with rsi_hot
     parabolic_7d: float = 2.5        # close vs. 7 days earlier
@@ -91,6 +93,11 @@ def add_features(df: pd.DataFrame, t: Thresholds | None = None) -> pd.DataFrame:
         out["address_ratio"] = _ratio_to_past(out["active_addresses"], 14)
     if "oi_usd" in out:
         out["oi_7d"] = out["oi_usd"] / out["oi_usd"].shift(7)
+    if "perp_volume" in out and "volume" in out:
+        # Perp volume is one exchange, spot is market-wide; the level differs per
+        # coin, so the rule watches the ratio against its own recent mean.
+        out["perp_spot"] = out["perp_volume"] / out["volume"].replace(0, float("nan"))
+        out["perp_spot_ratio"] = _ratio_to_past(out["perp_spot"], 14)
     return out
 
 
@@ -155,6 +162,9 @@ def detect_day(row: pd.Series, onchain_streak: int, t: Thresholds) -> list[Signa
     oi_7d = _value(row, "oi_7d")
     if oi_7d is not None and oi_7d >= t.oi_multiple:
         hype.append(f"Open Interest {oi_7d:.1f}× in 7 Tagen")
+    perp_spot, perp_jump = _value(row, "perp_spot"), _value(row, "perp_spot_ratio")
+    if perp_jump is not None and perp_jump >= t.perp_spot_jump:
+        hype.append(f"Perp-Volumen {perp_spot:.1f}× Spot ({perp_jump:.1f}× üblich, Hebel treibt)")
     funding = _value(row, "funding")
     if funding is not None and funding >= t.hot_funding:
         hype.append(f"Funding {funding:+.3f} % (Longs überhitzt)")

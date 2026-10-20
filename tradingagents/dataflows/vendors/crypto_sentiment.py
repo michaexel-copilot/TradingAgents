@@ -7,6 +7,7 @@ failing. Only free endpoints are used; Santiment needs a free API key.
   price/volume   Yahoo Finance (``<COIN>-USD``), CoinGecko as fallback
   funding rate   Bybit linear perpetual, Binance as fallback (8h rates, daily mean)
   open interest  Bybit linear perpetual, daily
+  perp volume    Bybit linear perpetual daily turnover in USD, Binance as fallback
   fear & greed   alternative.me (whole crypto market, mostly Bitcoin)
   social/onchain Santiment GraphQL (``SANTIMENT_API_KEY``): social volume,
                  weighted sentiment, daily active addresses
@@ -174,6 +175,45 @@ def fetch_funding_binance(coin: str, start: date, end: date) -> pd.Series:
 def fetch_funding(coin: str, start: date, end: date) -> tuple[pd.Series, str]:
     errors = []
     for name, fetch in (("Bybit", fetch_funding_bybit), ("Binance", fetch_funding_binance)):
+        try:
+            return fetch(coin, start, end), name
+        except SourceError as exc:
+            errors.append(str(exc))
+    raise SourceError("; ".join(errors))
+
+
+def fetch_perp_volume_bybit(coin: str, start: date, end: date) -> pd.Series:
+    data = _get_json(
+        "https://api.bybit.com/v5/market/kline",
+        {"category": "linear", "symbol": _perp_symbol(coin), "interval": "D",
+         "start": _ms(start), "end": _ms(end + timedelta(days=1)) - 1, "limit": 1000},
+    )
+    if data.get("retCode") != 0:
+        raise SourceError(f"Bybit: {data.get('retMsg')}")
+    # [startTime, open, high, low, close, volume (coins), turnover (USDT)]
+    rows = data.get("result", {}).get("list", [])
+    values = {pd.Timestamp(int(r[0]), unit="ms").normalize(): float(r[6]) for r in rows}
+    if not values:
+        raise SourceError(f"Bybit: kein Perp-Volumen für {_perp_symbol(coin)}")
+    return _daily_index(values, "perp_volume")
+
+
+def fetch_perp_volume_binance(coin: str, start: date, end: date) -> pd.Series:
+    data = _get_json(
+        "https://fapi.binance.com/fapi/v1/klines",
+        {"symbol": _perp_symbol(coin), "interval": "1d", "startTime": _ms(start),
+         "endTime": _ms(end + timedelta(days=1)) - 1, "limit": 1500},
+    )
+    if not isinstance(data, list) or not data:
+        raise SourceError(f"Binance: kein Perp-Volumen für {_perp_symbol(coin)}")
+    # [openTime, open, high, low, close, volume, closeTime, quoteVolume, ...]
+    return _daily_index({pd.Timestamp(int(r[0]), unit="ms").normalize(): float(r[7]) for r in data}, "perp_volume")
+
+
+def fetch_perp_volume(coin: str, start: date, end: date) -> tuple[pd.Series, str]:
+    """Daily USD volume of the coin's USDT perpetual (one exchange, not market-wide)."""
+    errors = []
+    for name, fetch in (("Bybit", fetch_perp_volume_bybit), ("Binance", fetch_perp_volume_binance)):
         try:
             return fetch(coin, start, end), name
         except SourceError as exc:

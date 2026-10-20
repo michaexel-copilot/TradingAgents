@@ -73,6 +73,7 @@ def collect(coin: str, start: date, end: date, santiment_slug: str | None = None
         return data
 
     attach("Funding Rate", lambda: sources.fetch_funding(coin, fetch_from, end))
+    attach("Perp-Volumen", lambda: sources.fetch_perp_volume(coin, fetch_from, end))
     if attach("Open Interest", lambda: sources.fetch_open_interest(coin, fetch_from, end)) is not None:
         frame["oi_usd"] = frame["oi_coins"] * frame["close"]
     attach("Fear & Greed (Gesamtmarkt)", lambda: sources.fetch_fear_greed(fetch_from, end))
@@ -94,7 +95,7 @@ def _num(value, digits=4):
 
 def llm_payload(report: Report) -> dict:
     window = report.window
-    columns = [c for c in ("close", "volume", "volume_ratio", "funding", "oi_usd", "fng", "social_volume",
+    columns = [c for c in ("close", "volume", "volume_ratio", "perp_volume", "perp_spot", "perp_spot_ratio", "funding", "oi_usd", "fng", "social_volume",
                            "social_ratio", "sentiment", "active_addresses", "rsi") if c in window]
     daily = [
         {"datum": day.date().isoformat(), **{c: _num(row[c]) for c in columns}}

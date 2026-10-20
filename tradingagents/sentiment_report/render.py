@@ -173,7 +173,7 @@ def render_html(report) -> str:
 <section><h2>Regeln</h2><ul>
 <li><b>Kauf (Ausbruch):</b> Schluss über dem {t.breakout_days}-Tage-Hoch, Volumen ≥ {t.volume_spike:g}× Median, Social Volume unter {t.quiet_social:g}× Schnitt, Funding ≤ {t.neutral_funding:g} %, Kurs höchstens {t.max_extension_buy:g}× über dem 20-Tage-Schnitt.</li>
 <li><b>Kauf (früh, On-Chain):</b> aktive Adressen {t.onchain_days} Tage in Folge ≥ {t.onchain_rise:g}× Schnitt, Crowd noch ruhig (nur mit Santiment-Daten).</li>
-<li><b>Verkauf (Euphorie):</b> mindestens {t.sell_confirmations} von: Social Volume ≥ {t.hype_social:g}×, Open Interest ≥ {t.oi_multiple:g}× in 7 Tagen, Funding ≥ {t.hot_funding:g} %, RSI ≥ {t.rsi_hot:g} bei ≥ {100 * (t.extension_hot - 1):.0f} % über 20-Tage-Schnitt, ≥ +{100 * (t.parabolic_7d - 1):.0f} % in 7 Tagen.</li>
+<li><b>Verkauf (Euphorie):</b> mindestens {t.sell_confirmations} von: Social Volume ≥ {t.hype_social:g}×, Open Interest ≥ {t.oi_multiple:g}× in 7 Tagen, Verhältnis Perp- zu Spot-Volumen ≥ {t.perp_spot_jump:g}× seines 14-Tage-Schnitts, Funding ≥ {t.hot_funding:g} %, RSI ≥ {t.rsi_hot:g} bei ≥ {100 * (t.extension_hot - 1):.0f} % über 20-Tage-Schnitt, ≥ +{100 * (t.parabolic_7d - 1):.0f} % in 7 Tagen.</li>
 <li><b>Beobachten:</b> Funding ≤ {t.extreme_funding:g} % (viele Shorts). Erst mit neuem Hoch ein Kauf.</li>
 </ul><p class="muted">Fehlt eine Quelle, entfällt nur ihre Bedingung. Funding in Prozent je 8 Stunden, Tagesmittel.</p></section>
 <section><h2>Datenquellen</h2><div class="tbl"><table><thead><tr><th>Daten</th><th>Quelle</th></tr></thead>
