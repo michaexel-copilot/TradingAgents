@@ -8,6 +8,7 @@ failing. Only free endpoints are used; Santiment needs a free API key.
   funding rate   Bybit linear perpetual, Binance as fallback (8h rates, daily mean)
   open interest  Bybit linear perpetual, daily
   perp volume    Bybit linear perpetual daily turnover in USD, Binance as fallback
+  long/short     Bybit share of accounts net long on the perpetual, Binance as fallback
   fear & greed   alternative.me (whole crypto market, mostly Bitcoin)
   social/onchain Santiment GraphQL (``SANTIMENT_API_KEY``): social volume,
                  weighted sentiment, daily active addresses, exchange in- and
@@ -217,6 +218,57 @@ def fetch_perp_volume(coin: str, start: date, end: date) -> tuple[pd.Series, str
     for name, fetch in (("Bybit", fetch_perp_volume_bybit), ("Binance", fetch_perp_volume_binance)):
         try:
             return fetch(coin, start, end), name
+        except SourceError as exc:
+            errors.append(str(exc))
+    raise SourceError("; ".join(errors))
+
+
+def fetch_long_share_bybit(coin: str, start: date, end: date) -> pd.Series:
+    values: dict[pd.Timestamp, float] = {}
+    cursor = ""
+    for _ in range(20):
+        params = {"category": "linear", "symbol": _perp_symbol(coin), "period": "1d",
+                  "startTime": _ms(start), "endTime": _ms(end + timedelta(days=1)), "limit": 500}
+        if cursor:
+            params["cursor"] = cursor
+        data = _get_json("https://api.bybit.com/v5/market/account-ratio", params)
+        if data.get("retCode") != 0:
+            raise SourceError(f"Bybit: {data.get('retMsg')}")
+        result = data.get("result", {})
+        for row in result.get("list", []):
+            values[pd.Timestamp(int(row["timestamp"]), unit="ms").normalize()] = float(row["buyRatio"])
+        cursor = result.get("nextPageCursor") or ""
+        if not cursor:
+            break
+    if not values:
+        raise SourceError(f"Bybit: kein Long/Short-Verhältnis für {_perp_symbol(coin)}")
+    return _daily_index(values, "long_share")
+
+
+def fetch_long_share_binance(coin: str, start: date, end: date) -> pd.Series:
+    # Binance keeps only the last 30 days of this series.
+    data = _get_json(
+        "https://fapi.binance.com/futures/data/globalLongShortAccountRatio",
+        {"symbol": _perp_symbol(coin), "period": "1d", "limit": 30},
+    )
+    if not isinstance(data, list) or not data:
+        raise SourceError(f"Binance: kein Long/Short-Verhältnis für {_perp_symbol(coin)}")
+    series = _daily_index(
+        {pd.Timestamp(int(r["timestamp"]), unit="ms").normalize(): float(r["longAccount"]) for r in data},
+        "long_share",
+    )
+    return series[(series.index >= pd.Timestamp(start)) & (series.index <= pd.Timestamp(end))]
+
+
+def fetch_long_share(coin: str, start: date, end: date) -> tuple[pd.Series, str]:
+    """Daily share (0..1) of perpetual accounts that are net long."""
+    errors = []
+    for name, fetch in (("Bybit", fetch_long_share_bybit), ("Binance (nur 30 Tage)", fetch_long_share_binance)):
+        try:
+            series = fetch(coin, start, end)
+            if not series.empty:
+                return series, name
+            errors.append(f"{name}: keine Werte im Zeitraum")
         except SourceError as exc:
             errors.append(str(exc))
     raise SourceError("; ".join(errors))

@@ -7,7 +7,7 @@ and the exit came with the social and leverage euphoria. Every rule works on
 whatever columns are present; a missing source only removes its condition.
 
 Input frame columns (daily, all optional except ``close``): close, volume,
-funding (percent per 8h), oi_usd, perp_volume (USD), fng, social_volume, sentiment,
+funding (percent per 8h), oi_usd, perp_volume (USD), long_share (0..1), fng, social_volume, sentiment,
 active_addresses, exchange_inflow, exchange_outflow (coins), whale_transactions.
 """
 
@@ -32,6 +32,8 @@ class Thresholds:
     hype_social: float = 4.0         # social volume spike that marks euphoria
     oi_multiple: float = 3.0         # open interest vs. 7 days earlier
     hot_funding: float = 0.05        # percent per 8h
+    crowded_long: float = 0.65       # share of perp accounts net long at which the crowd is all in
+    long_shift: float = 0.08         # ... and it rose this much (share points) above its 14-day mean
     perp_spot_jump: float = 2.0      # perp/spot volume ratio vs. its 14-day mean: leverage takes over
     inflow_jump: float = 3.0         # coins sent to exchanges vs. 14-day mean: holders get ready to sell
     outflow_days: int = 3            # net outflow on this many of the last 5 days confirms a buy
@@ -102,6 +104,8 @@ def add_features(df: pd.DataFrame, t: Thresholds | None = None) -> pd.DataFrame:
         # coin, so the rule watches the ratio against its own recent mean.
         out["perp_spot"] = out["perp_volume"] / out["volume"].replace(0, float("nan"))
         out["perp_spot_ratio"] = _ratio_to_past(out["perp_spot"], 14)
+    if "long_share" in out:
+        out["long_shift"] = out["long_share"] - out["long_share"].shift(1).rolling(14, min_periods=7).mean()
     if "exchange_inflow" in out:
         out["inflow_ratio"] = _ratio_to_past(out["exchange_inflow"], 14)
         if "exchange_outflow" in out:
@@ -133,6 +137,10 @@ def _crowd_checks(row: pd.Series, t: Thresholds) -> tuple[bool, list[str]]:
     if social is not None:
         ok &= social < t.quiet_social
         reasons.append(f"Social Volume {social:.1f}× Schnitt (Crowd {'noch ruhig' if social < t.quiet_social else 'schon laut'})")
+    long_share = _value(row, "long_share")
+    if long_share is not None:
+        ok &= long_share < t.crowded_long
+        reasons.append(f"Long-Anteil {100 * long_share:.0f} % ({'Crowd skeptisch' if long_share <= 0.5 else 'Crowd eher long' if long_share < t.crowded_long else 'Crowd voll long'})")
     funding = _value(row, "funding")
     if funding is not None:
         ok &= funding <= t.neutral_funding
@@ -185,6 +193,9 @@ def detect_day(row: pd.Series, onchain_streak: int, t: Thresholds) -> list[Signa
     perp_spot, perp_jump = _value(row, "perp_spot"), _value(row, "perp_spot_ratio")
     if perp_jump is not None and perp_jump >= t.perp_spot_jump:
         hype.append(f"Perp-Volumen {perp_spot:.1f}× Spot ({perp_jump:.1f}× üblich, Hebel treibt)")
+    long_share, long_shift = _value(row, "long_share"), _value(row, "long_shift")
+    if long_share is not None and long_shift is not None and long_share >= t.crowded_long and long_shift >= t.long_shift:
+        hype.append(f"Long-Anteil {100 * long_share:.0f} % (+{100 * long_shift:.0f} Punkte über Schnitt)")
     inflow = _value(row, "inflow_ratio")
     if inflow is not None and inflow >= t.inflow_jump:
         hype.append(f"Börsenzufluss {inflow:.1f}× Schnitt (Halter schicken Coins zum Verkauf)")

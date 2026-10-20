@@ -194,7 +194,7 @@ def test_missing_sources_listed_in_coverage():
     fail = mock.Mock(side_effect=cs.SourceError("blocked"))
     with mock.patch.object(cs, "fetch_price", return_value=(price, "Yahoo Finance")), \
          mock.patch.object(cs, "fetch_funding", fail), mock.patch.object(cs, "fetch_open_interest", fail), \
-         mock.patch.object(cs, "fetch_perp_volume", fail), \
+         mock.patch.object(cs, "fetch_perp_volume", fail), mock.patch.object(cs, "fetch_long_share", fail), \
          mock.patch.object(cs, "fetch_fear_greed", fail), mock.patch.object(cs, "fetch_santiment", fail):
         r = build_report("QNT", START, END, llm_backend="none")
     assert r.coverage["Kurs & Volumen"] == "Yahoo Finance"
@@ -245,3 +245,29 @@ def test_whale_spike_counts_only_after_a_rally():
     row["ret_7d"] = 1.5
     sells = [s for s in detect_day(row, 0, Thresholds()) if s.kind == "sell"]
     assert sells and any("Wal-Transaktionen 4.0×" in r for r in sells[0].reasons)
+
+
+def test_bybit_long_share_pages_through_cursor():
+    pages = [
+        {"retCode": 0, "result": {"list": [{"buyRatio": "0.42", "sellRatio": "0.58", "timestamp": str(_ms("2026-09-22"))}],
+                                  "nextPageCursor": "next"}},
+        {"retCode": 0, "result": {"list": [{"buyRatio": "0.71", "sellRatio": "0.29", "timestamp": str(_ms("2026-09-27"))}],
+                                  "nextPageCursor": ""}},
+    ]
+    with mock.patch.object(cs, "_get_json", side_effect=pages):
+        series = cs.fetch_long_share_bybit("QNT", date(2026, 9, 20), date(2026, 9, 30))
+    assert series.tolist() == [0.42, 0.71]
+
+
+def test_crowd_all_long_blocks_buy_and_counts_toward_sell():
+    frame = qnt_frame().assign(long_share=0.45)
+    features = add_features(frame)
+    row = features.loc["2026-09-22"].copy()
+    buy = [s for s in detect_day(row, 0, Thresholds()) if s.kind == "buy"]
+    assert buy and any("Long-Anteil 45 % (Crowd skeptisch)" in r for r in buy[0].reasons)
+    row["long_share"], row["long_shift"] = 0.74, 0.29
+    row["rsi"], row["extension"] = 85.0, 1.4
+    signals = detect_day(row, 0, Thresholds())
+    assert not [s for s in signals if s.kind == "buy"]
+    sells = [s for s in signals if s.kind == "sell"]
+    assert sells and any("Long-Anteil 74 %" in r for r in sells[0].reasons)
