@@ -109,12 +109,14 @@ class Library:
 
     def state(self) -> dict:
         registered = self._registered()
-        names = {c["id"]: c["name"] for c in (self._universe[1] if self._universe else [])}
+        listed = {c["id"]: c for c in (self._universe[1] if self._universe else [])}
         reports = self._reports()
         coins = {}
         for coin_id in set(registered) | {r["coin"] for r in reports}:
-            coins[coin_id] = {"id": coin_id, "name": registered.get(coin_id) or names.get(coin_id, ""),
-                              "reports": []}
+            known = listed.get(coin_id, {})
+            # rank: position on cryptobubbles.net, None while the list isn't loaded or lacks the coin
+            coins[coin_id] = {"id": coin_id, "name": registered.get(coin_id) or known.get("name", ""),
+                              "rank": known.get("rank"), "reports": []}
         for report in reports:
             coins[report["coin"]]["reports"].append(report)
         for coin in coins.values():

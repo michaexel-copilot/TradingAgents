@@ -44,7 +44,7 @@ def test_state_orders_reports_by_end_date(library):
     library.universe()  # names come from the list for coins only known by their reports
     coins = library.state()["coins"]
     assert [c["id"] for c in coins] == ["QNT"]
-    assert coins[0]["name"] == "Quant"
+    assert coins[0]["name"] == "Quant" and coins[0]["rank"] == 120
     assert [(r["start"], r["end"]) for r in coins[0]["reports"]] == [
         ("2026-07-01", "2026-09-30"), ("2026-08-24", "2026-10-19"), ("2026-09-01", "2026-10-19")]
 
