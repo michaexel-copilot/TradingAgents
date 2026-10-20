@@ -59,11 +59,18 @@ class Signal:
     end_day: pd.Timestamp | None = None
     outcome: str = ""
     return_pct: float | None = None
+    # Worst and best move against the entry close while the trade was open (for SL/TP):
+    # for a buy or watch the lowest low and highest high, for a sell taken as a
+    # short the highest high and lowest low, each in percent.
+    max_drawdown_pct: float | None = None
+    max_runup_pct: float | None = None
+    drawdown_day: pd.Timestamp | None = None
 
     def as_dict(self) -> dict:
         data = asdict(self)
         data["day"] = self.day.date().isoformat()
         data["end_day"] = self.end_day.date().isoformat() if self.end_day is not None else None
+        data["drawdown_day"] = self.drawdown_day.date().isoformat() if self.drawdown_day is not None else None
         return data
 
 
@@ -245,8 +252,35 @@ def detect_signals(features: pd.DataFrame, start: pd.Timestamp, t: Thresholds | 
     return merged
 
 
+def _excursions(signal: Signal, features: pd.DataFrame, until: pd.Timestamp, short: bool = False) -> None:
+    """Max drawdown and run-up of a position opened at the signal's close, over the days
+    after entry up to ``until``, in percent from the position's view (a short loses when
+    the price rises). Uses the daily low/high where the source has them, else the close.
+    """
+    path = features[(features.index > signal.day) & (features.index <= until)]
+    if path.empty:
+        return
+    low = path["low"] if "low" in path else path["close"]
+    high = path["high"] if "high" in path else path["close"]
+    sign = -1 if short else 1
+    adverse, favourable = (high, low) if short else (low, high)
+    worst_day = adverse.idxmax() if short else adverse.idxmin()
+    signal.max_drawdown_pct = min(0.0, sign * 100 * (adverse[worst_day] / signal.close - 1))
+    best = favourable.min() if short else favourable.max()
+    signal.max_runup_pct = max(0.0, sign * 100 * (best / signal.close - 1))
+    signal.drawdown_day = worst_day
+
+
+def _excursion_text(signal: Signal, label: str = "max. Drawdown") -> str:
+    if signal.max_drawdown_pct is None:
+        return ""
+    return (f"; {label} {signal.max_drawdown_pct:+.0f} % ({signal.drawdown_day:%d.%m.}), "
+            f"max. Gewinn {signal.max_runup_pct:+.0f} %")
+
+
 def score_outcomes(signals: list[Signal], features: pd.DataFrame) -> None:
-    """What each signal would have returned: buys until the next sell (or the last day)."""
+    """What each signal would have returned: buys until the next sell (or the last day),
+    with the max drawdown on the way for stop-loss and take-profit analysis."""
     close = features["close"]
     last_day = close.index[-1]
     for signal in signals:
@@ -255,15 +289,23 @@ def score_outcomes(signals: list[Signal], features: pd.DataFrame) -> None:
             signal.return_pct = 100 * (close[exit_day] / signal.close - 1)
             target = "bis Verkaufssignal" if exit_day != last_day else "bis heute"
             signal.outcome = f"{target}: {signal.return_pct:+.0f} %"
+            _excursions(signal, features, exit_day)
+            signal.outcome += _excursion_text(signal)
         elif signal.kind == "sell":
             signal.return_pct = 100 * (close[last_day] / signal.close - 1)
             signal.outcome = f"danach {signal.return_pct:+.0f} % bis Ende Zeitraum"
+            # Seen as a short: the drawdown is the highest the price went after the sell.
+            _excursions(signal, features, last_day, short=True)
+            signal.outcome += _excursion_text(signal, "max. Drawdown als Short")
         else:
             later = close[signal.day:].iloc[1:15]
             if not later.empty:
                 best = 100 * (later.max() / signal.close - 1)
                 worst = 100 * (later.min() / signal.close - 1)
                 signal.outcome = f"14 Tage danach: max {best:+.0f} %, min {worst:+.0f} %"
+                _excursions(signal, features, later.index[-1])
+                if signal.drawdown_day is not None:  # max/min above already are run-up and drawdown
+                    signal.outcome += f" (Tief am {signal.drawdown_day:%d.%m.})"
 
 
 def current_stance(signals: list[Signal], features: pd.DataFrame) -> tuple[str, str]:

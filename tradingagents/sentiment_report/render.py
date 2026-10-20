@@ -168,7 +168,7 @@ def render_html(report) -> str:
 <section><h2>Die Signale im Detail</h2><div class="tbl"><table>
 <thead><tr><th>Datum</th><th>Signal</th><th>Was die Daten zeigten</th><th>Kurs</th><th>Ergebnis</th></tr></thead>
 <tbody>{rows}</tbody></table></div>
-<p class="muted" style="font-size:15px">Renditen rückblickend von Tagesschluss zu Tagesschluss: Käufe bis zum nächsten Verkaufssignal oder bis zum Ende des Zeitraums.</p></section>
+<p class="muted" style="font-size:15px">Renditen rückblickend von Tagesschluss zu Tagesschluss: Käufe bis zum nächsten Verkaufssignal oder bis zum Ende des Zeitraums. Max. Drawdown und max. Gewinn messen ab dem Signal-Schlusskurs den schlechtesten und besten Stand bis zum Ausstieg (Tagestief und -hoch, sonst Schlusskurs), Verkaufssignale gesehen als Short bis Ende Zeitraum, Beobachtungen über 14 Tage. Das Datum nennt den Tag des Drawdowns. Die Werte stehen auch in der JSON-Datei (max_drawdown_pct, max_runup_pct, drawdown_day) für eine spätere SL/TP-Auswertung.</p></section>
 <section><h2>Einschätzung</h2>{narrative}<p class="note">{escape(report.narrative_note)}</p></section>
 <section><h2>Regeln</h2><ul>
 <li><b>Kauf (Ausbruch):</b> Schluss über dem {t.breakout_days}-Tage-Hoch, Volumen ≥ {t.volume_spike:g}× Median, Social Volume unter {t.quiet_social:g}× Schnitt, Funding ≤ {t.neutral_funding:g} %, Long-Anteil der Perp-Konten unter {100 * t.crowded_long:.0f} %, Börsenzufluss unter {t.inflow_jump:g}× Schnitt, Kurs höchstens {t.max_extension_buy:g}× über dem 20-Tage-Schnitt. Netto-Abfluss von Börsen an ≥ {t.outflow_days} der letzten 5 Tage wird als Bestätigung angezeigt.</li>

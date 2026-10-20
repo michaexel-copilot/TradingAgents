@@ -271,3 +271,28 @@ def test_crowd_all_long_blocks_buy_and_counts_toward_sell():
     assert not [s for s in signals if s.kind == "buy"]
     sells = [s for s in signals if s.kind == "sell"]
     assert sells and any("Long-Anteil 74 %" in r for r in sells[0].reasons)
+
+
+def test_outcomes_carry_max_drawdown_for_sl_tp():
+    buy, sell, watch = report().signals
+    # Bought at 73.78 on 22.09, the 23.09 close of 70.66 is the low before the sell on 27.09.
+    assert buy.max_drawdown_pct == pytest.approx(100 * (70.66 / 73.78 - 1))
+    assert buy.drawdown_day == pd.Timestamp("2026-09-23")
+    assert buy.max_runup_pct == pytest.approx(100 * (286.1 / 73.78 - 1))
+    assert "max. Drawdown -4 % (23.09.), max. Gewinn +288 %" in buy.outcome
+    # The sell as a short from 286.10: 287.07 on 30.09 is the worst, never a positive drawdown.
+    assert sell.max_drawdown_pct == pytest.approx(-100 * (287.07 / 286.1 - 1))
+    assert sell.drawdown_day == pd.Timestamp("2026-09-30")
+    assert sell.max_runup_pct > 30
+    assert "max. Drawdown als Short -0 % (30.09.)" in sell.outcome
+    assert "(Tief am 18.10.)" in watch.outcome
+    assert buy.as_dict()["drawdown_day"] == "2026-09-23"
+
+
+def test_drawdown_uses_daily_lows_when_present():
+    frame = qnt_frame()
+    frame["high"], frame["low"] = frame["close"], frame["close"]
+    frame.loc["2026-09-24", "low"] = 66.0
+    buy = build_report("QNT", START, END, frame=frame, llm_backend="none").signals[0]
+    assert buy.drawdown_day == pd.Timestamp("2026-09-24")
+    assert buy.max_drawdown_pct == pytest.approx(100 * (66.0 / 73.78 - 1))
