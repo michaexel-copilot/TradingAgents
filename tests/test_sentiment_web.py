@@ -189,3 +189,17 @@ def test_coin_overview_falls_back_to_saved_closes(library):
     assert data["signals"][0]["max_drawdown_pct"] == pytest.approx(-20)
     assert data["signals"][0]["current_pct"] == pytest.approx(50)
     assert call(library, "GET", "/api/coins/..%2F/overview")[0] == 400
+
+
+def test_delete_report_removes_html_and_json_and_keeps_the_coin(library):
+    html = library.folder / "QNT_20260701-20260930_sentiment.html"
+    json_file = library.folder / "QNT_20260701-20260930_sentiment.json"
+    json_file.write_text("{}", encoding="utf-8")
+    status, _ = call(library, "POST", "/api/reports/delete", {"file": html.name})
+    assert status == 200 and not html.exists() and not json_file.exists()
+    for name in ("QNT_20260824-20261019_sentiment.html", "QNT_20260901-20261019_sentiment.html"):
+        library.delete_report(name)
+    coins = library.state()["coins"]
+    assert [c["id"] for c in coins] == ["QNT"] and coins[0]["reports"] == []
+    assert call(library, "POST", "/api/reports/delete", {"file": "../coins.json"})[0] == 400
+    assert call(library, "POST", "/api/reports/delete", {"file": html.name})[0] == 400  # already gone

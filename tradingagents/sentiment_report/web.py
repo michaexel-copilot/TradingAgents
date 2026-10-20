@@ -132,6 +132,27 @@ class Library:
         taken = set(self._registered()) | self._report_coins()
         return {"source": self._universe[2], "coins": [c for c in self._universe[1] if c["id"] not in taken]}
 
+    def delete_report(self, file: str) -> dict:
+        """Remove one report (HTML and JSON). The coin stays in the analysis."""
+        match = REPORT_FILE.match(file)
+        if not match:
+            raise ValueError("Ungültiger Berichtsname")
+        html = self.folder / file
+        if not html.is_file():
+            raise ValueError("Bericht nicht gefunden")
+        with self._lock:
+            coins = self._registered()
+            if match[1] not in coins:  # known only by its reports so far: keep it in the tree
+                coins[match[1]] = self._listed_name(match[1])
+                self._coins_file.write_text(json.dumps(coins, ensure_ascii=False, indent=1), encoding="utf-8")
+            html.unlink()
+            html.with_name(file.replace(".html", ".json")).unlink(missing_ok=True)
+        return {"deleted": file}
+
+    def _listed_name(self, coin_id: str) -> str:
+        listed = {c["id"]: c["name"] for c in (self._universe[1] if self._universe else [])}
+        return listed.get(coin_id, coin_id)
+
     # --- coin overview -----------------------------------------------------
 
     def _prices_until_today(self, coin_id: str, since: date, saved: pd.DataFrame) -> tuple[pd.DataFrame, str]:
@@ -275,6 +296,8 @@ def make_handler(library: Library):
                     job = library.queue_report(coin["id"], None, None, int(body.get("days") or 56)) \
                         if body.get("run") else None
                     self._json({"coin": coin, "job": job}, HTTPStatus.CREATED)
+                elif self.path == "/api/reports/delete":
+                    self._json(library.delete_report(str(body.get("file", ""))))
                 elif self.path == "/api/reports":
                     job = library.queue_report(str(body.get("id", "")), body.get("start"), body.get("end"),
                                                int(body.get("days") or 56))

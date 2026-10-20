@@ -68,6 +68,7 @@ iframe{flex:1;border:0;width:100%;background:var(--bg)}
 #overview tr:last-child td{border-bottom:0}
 #overview td.num{text-align:right;font-family:var(--mono)}
 #overview .pos{color:var(--ok)}#overview .neg{color:var(--err)}
+#overview button.link.danger{color:var(--err)}
 #overview button.link{width:auto;background:none;border:0;padding:0;color:var(--accent);font-weight:400;text-decoration:underline}
 .pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600}
 .pill.buy{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
@@ -289,11 +290,27 @@ async function loadOverview(coin) {
   }
   const open = r => { const b = el("button", {type: "button", className: "link", textContent: "öffnen"});
                       b.addEventListener("click", () => show(coin, r)); return b; };
-  const reports = table(["Zeitraum", "Erstellt", "Version", ""], data.reports.slice().reverse().map(r => el("tr", {},
+  // Deleting asks once more on the button itself before anything is removed.
+  const remove = r => {
+    const b = el("button", {type: "button", className: "link danger", textContent: "löschen"});
+    b.addEventListener("click", async () => {
+      if (!b.dataset.armed) {
+        b.dataset.armed = "1"; b.textContent = "wirklich löschen?";
+        setTimeout(() => { delete b.dataset.armed; b.textContent = "löschen"; }, 4000);
+        return;
+      }
+      try { await api("/api/reports/delete", {file: r.file}); }
+      catch (e) { $("msg").textContent = e.message; $("msg").className = "err"; return; }
+      await refresh();
+      show(state.coins.find(c => c.id === coin.id) || {...coin, reports: []}, null);
+    });
+    return b;
+  };
+  const reports = table(["Zeitraum", "Erstellt", "Version", "", ""], data.reports.slice().reverse().map(r => el("tr", {},
     el("td", {textContent: `${de(r.start)} – ${de(r.end)}`}),
     el("td", {textContent: r.created ? deTime(r.created) : "–"}),
     el("td", {className: r.outdated ? "warn" : "", textContent: (r.version || "ohne Angabe") + (r.outdated ? " (veraltet)" : "")}),
-    el("td", {}, open(r)))));
+    el("td", {}, open(r)), el("td", {}, remove(r)))));
   const byFile = Object.fromEntries(data.reports.map(r => [r.file, r]));
   const signals = data.signals.length ? table(
     ["Datum", "Signal", "Kurs", "Max. Gewinn", "Max. Drawdown", "Tag Drawdown", "Stand heute", "Bericht"],
