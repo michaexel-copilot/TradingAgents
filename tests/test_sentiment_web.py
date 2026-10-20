@@ -142,3 +142,50 @@ def test_state_carries_creation_time_and_version(library):
     old = reports["QNT_20260901-20261019_sentiment.html"]  # written before reports were stamped
     assert old["created"] == "" and old["outdated"]
     assert library.state()["version"].startswith(REPORT_VERSION)
+
+
+def test_coin_overview_scores_signals_up_to_today(library):
+    import pandas as pd
+
+    def report_json(name, signals, days):
+        (library.folder / name).write_text(json.dumps({
+            "signale": signals,
+            "tageswerte": [{"datum": d, "close": c} for d, c in days],
+        }), encoding="utf-8")
+
+    buy = {"kind": "buy", "label": "Kauf", "day": "2026-09-22", "end_day": None, "close": 100.0, "reasons": ["Ausbruch"]}
+    sell = {"kind": "sell", "label": "Verkauf", "day": "2026-09-27", "end_day": "2026-09-28", "close": 200.0, "reasons": []}
+    watch = {"kind": "watch", "label": "Beobachten", "day": "2026-10-04", "close": 150.0}
+    report_json("QNT_20260824-20261019_sentiment.json", [buy, sell, watch], [("2026-09-22", 100.0)])
+    report_json("QNT_20260901-20261019_sentiment.json", [buy], [])  # the same buy again
+    prices = pd.DataFrame({"close": [90.0, 200.0, 220.0, 120.0], "high": [95.0, 210.0, 230.0, 125.0],
+                           "low": [85.0, 190.0, 200.0, 110.0]},
+                          index=pd.to_datetime(["2026-09-23", "2026-09-27", "2026-09-30", "2026-10-20"]))
+    with mock.patch.object(cs, "fetch_price", return_value=(prices, "Yahoo Finance")) as fetch:
+        status, body = call(library, "GET", "/api/coins/qnt/overview")
+        library.overview("QNT")  # cached
+    assert status == 200 and fetch.call_count == 1
+    data = json.loads(body)
+    assert len(data["reports"]) == 3
+    assert data["prices"] == {"source": "Yahoo Finance", "until": "2026-10-20", "close": 120.0}
+    first, second = data["signals"]  # the watch is left out, the double buy counted once
+    assert first["kind"] == "buy" and len(first["reports"]) == 2
+    assert first["max_drawdown_pct"] == pytest.approx(-15) and first["drawdown_day"] == "2026-09-23"
+    assert first["max_runup_pct"] == pytest.approx(130) and first["current_pct"] == pytest.approx(20)
+    # The sell as a short from 200: the 230 high on 30.09 is the drawdown, 110 the best low.
+    assert second["max_drawdown_pct"] == pytest.approx(-15) and second["drawdown_day"] == "2026-09-30"
+    assert second["max_runup_pct"] == pytest.approx(45) and second["current_pct"] == pytest.approx(40)
+
+
+def test_coin_overview_falls_back_to_saved_closes(library):
+    (library.folder / "QNT_20260824-20261019_sentiment.json").write_text(json.dumps({
+        "signale": [{"kind": "buy", "label": "Kauf", "day": "2026-09-22", "close": 100.0}],
+        "tageswerte": [{"datum": "2026-09-22", "close": 100.0}, {"datum": "2026-09-23", "close": 80.0},
+                       {"datum": "2026-10-19", "close": 150.0}],
+    }), encoding="utf-8")
+    with mock.patch.object(cs, "fetch_price", side_effect=cs.SourceError("offline")):
+        data = library.overview("QNT")
+    assert data["prices"]["until"] == "2026-10-19" and "nicht abrufbar" in data["prices"]["source"]
+    assert data["signals"][0]["max_drawdown_pct"] == pytest.approx(-20)
+    assert data["signals"][0]["current_pct"] == pytest.approx(50)
+    assert call(library, "GET", "/api/coins/..%2F/overview")[0] == 400

@@ -252,23 +252,31 @@ def detect_signals(features: pd.DataFrame, start: pd.Timestamp, t: Thresholds | 
     return merged
 
 
-def _excursions(signal: Signal, features: pd.DataFrame, until: pd.Timestamp, short: bool = False) -> None:
-    """Max drawdown and run-up of a position opened at the signal's close, over the days
-    after entry up to ``until``, in percent from the position's view (a short loses when
-    the price rises). Uses the daily low/high where the source has them, else the close.
+def excursion(entry_close: float, entry_day: pd.Timestamp, features: pd.DataFrame, until: pd.Timestamp,
+              short: bool = False) -> tuple[float, float, pd.Timestamp] | None:
+    """Max drawdown, max gain and drawdown day of a position opened at ``entry_close`` on
+    ``entry_day``, over the days after entry up to ``until``, in percent from the position's
+    view (a short loses when the price rises). Uses the daily low/high where the source has
+    them, else the close. None when there is no day after the entry.
     """
-    path = features[(features.index > signal.day) & (features.index <= until)]
+    path = features[(features.index > entry_day) & (features.index <= until)]
     if path.empty:
-        return
+        return None
     low = path["low"] if "low" in path else path["close"]
     high = path["high"] if "high" in path else path["close"]
+    low, high = low.fillna(path["close"]), high.fillna(path["close"])
     sign = -1 if short else 1
     adverse, favourable = (high, low) if short else (low, high)
     worst_day = adverse.idxmax() if short else adverse.idxmin()
-    signal.max_drawdown_pct = min(0.0, sign * 100 * (adverse[worst_day] / signal.close - 1))
+    drawdown = min(0.0, sign * 100 * (adverse[worst_day] / entry_close - 1))
     best = favourable.min() if short else favourable.max()
-    signal.max_runup_pct = max(0.0, sign * 100 * (best / signal.close - 1))
-    signal.drawdown_day = worst_day
+    return drawdown, max(0.0, sign * 100 * (best / entry_close - 1)), worst_day
+
+
+def _excursions(signal: Signal, features: pd.DataFrame, until: pd.Timestamp, short: bool = False) -> None:
+    found = excursion(signal.close, signal.day, features, until, short)
+    if found:
+        signal.max_drawdown_pct, signal.max_runup_pct, signal.drawdown_day = found
 
 
 def _excursion_text(signal: Signal, label: str = "max. Drawdown") -> str:

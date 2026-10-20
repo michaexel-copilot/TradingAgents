@@ -43,7 +43,7 @@ summary:hover{background:var(--bg)}
 .date{display:block;width:calc(100% - 22px);min-width:0;margin:1px 0 1px 22px;text-align:left;background:none;border:0;color:var(--ink);font:13px var(--mono);font-weight:400;padding:3px 6px;border-radius:4px}
 .date:hover{background:var(--bg)}
 .date.ghost{color:var(--accent);font-family:inherit}
-.date.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
+.date.active,.coin>summary.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
 .empty{margin:2px 0 2px 28px;font-size:13px;color:var(--muted)}
 section{display:flex;flex-direction:column;min-height:0;min-width:0}
 .detail-head{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
@@ -58,6 +58,20 @@ form.rerun label{flex-direction:column;width:150px}
 form.rerun button{width:auto}
 iframe{flex:1;border:0;width:100%;background:var(--bg)}
 .placeholder{padding:40px 16px;color:var(--muted)}
+#overview{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:18px}
+#overview h2{font-size:16px;margin:0 0 8px}
+.tbl{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+#overview table{border-collapse:collapse;width:100%;font-size:14px}
+#overview th,#overview td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+#overview th{font-size:12px;color:var(--muted);font-weight:600}
+#overview tr:last-child td{border-bottom:0}
+#overview td.num{text-align:right;font-family:var(--mono)}
+#overview .pos{color:var(--ok)}#overview .neg{color:var(--err)}
+#overview button.link{width:auto;background:none;border:0;padding:0;color:var(--accent);font-weight:400;text-decoration:underline}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600}
+.pill.buy{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.pill.sell{background:color-mix(in srgb,var(--err) 15%,transparent);color:var(--err)}
+.hint{font-size:13px;color:var(--muted);margin:6px 0 0}
 #jobs{font-size:13px;display:flex;flex-wrap:wrap;gap:6px 14px}
 @media (max-width:820px){
   form{grid-template-columns:1fr}.actions{padding-top:0}
@@ -106,7 +120,8 @@ iframe{flex:1;border:0;width:100%;background:var(--bg)}
         </form>
       </div>
     </div>
-    <div class="placeholder" id="placeholder">Wähle links ein Datum, um den Bericht zu sehen.</div>
+    <div class="placeholder" id="placeholder">Wähle links einen Coin für die Übersicht oder ein Datum für den Bericht.</div>
+    <div id="overview" hidden></div>
     <iframe id="report" title="Bericht" hidden></iframe>
   </section>
 </main>
@@ -199,6 +214,13 @@ function renderTree() {
                          " ", el("span", {className: "name", textContent: c.name ? `(${c.name})` : ""}));
       const node = el("details", {className: "coin", open: openCoins.has(c.id) || !!q}, summary);
       node.addEventListener("toggle", () => node.open ? openCoins.add(c.id) : openCoins.delete(c.id));
+      summary.addEventListener("click", ev => {
+        // The first click on a coin opens its overview and keeps it open; a second one folds it.
+        const current = selected && !selected.file && selected.coin.id === c.id;
+        if (!current && node.open) ev.preventDefault();
+        show(c, null);
+      });
+      if (selected && !selected.file && selected.coin.id === c.id) summary.classList.add("active");
       const ends = c.reports.map(r => r.end);
       c.reports.forEach(r => {
         const twice = ends.filter(e => e === r.end).length > 1;
@@ -211,12 +233,8 @@ function renderTree() {
       const job = state.jobs.filter(j => j.coin === c.id && j.status !== "fertig").pop();
       if (job) node.append(el("div", {className: "empty " + (job.status === "fehler" ? "err" : "warn"),
                                       textContent: job.status === "fehler" ? `Fehler: ${job.message}` : `Bericht ${job.status} …`}));
-      if (!c.reports.length && (!job || job.status === "fehler")) {
-        const empty = el("button", {type: "button", textContent: "noch kein Bericht",
-                                    className: "date ghost" + (selected && !selected.file && selected.coin.id === c.id ? " active" : "")});
-        empty.addEventListener("click", () => show(c, null));
-        node.append(empty);
-      }
+      if (!c.reports.length && (!job || job.status === "fehler"))
+        node.append(el("div", {className: "empty", textContent: "noch kein Bericht"}));
       group.append(node);
     });
     tree.append(group);
@@ -224,15 +242,14 @@ function renderTree() {
 }
 $("tree-filter").addEventListener("input", renderTree);
 
-// A coin's detail: its report, or with report null an empty page to start the first one.
+// A coin's detail: one report, or with report null the coin's overview (reports and signals).
 function show(coin, report) {
-  selected = {...(report || {}), coin};
+  selected = {...(report || {}), coin, count: coin.reports?.length || 0};
   openCoins.add(coin.id);
   if ($("detail-head").hidden) resetPeriod();
   $("detail-head").hidden = false;
   $("detail-meta").replaceChildren(el("b", {textContent: coin.id}), coin.name ? ` (${coin.name})` : "",
-    report ? ` · Bericht vom ${de(report.end)} · Zeitraum ${de(report.start)} – ${de(report.end)}`
-           : " · noch kein Bericht");
+    report ? ` · Bericht vom ${de(report.end)} · Zeitraum ${de(report.start)} – ${de(report.end)}` : " · Übersicht");
   if (report) $("detail-meta").append(el("span", {
     className: "stamp" + (report.outdated ? " warn" : ""),
     textContent: (report.created ? `Erstellt am ${deTime(report.created)} · Version ${report.version}`
@@ -241,11 +258,58 @@ function show(coin, report) {
   $("update").hidden = !report;
   const frame = $("report");
   frame.hidden = !report;
-  $("placeholder").hidden = !!report;
-  $("placeholder").textContent = "Noch kein Bericht. Wähle oben Von und Bis und klicke auf „Bericht erstellen“.";
+  $("placeholder").hidden = true;
+  $("overview").hidden = !!report;
   if (report) frame.src = "/reports/" + encodeURIComponent(report.file) + "?v=" + encodeURIComponent(report.created);
-  else frame.removeAttribute("src");
+  else { frame.removeAttribute("src"); loadOverview(coin); }
   renderTree();
+}
+
+const pct = v => v == null ? "–" : Math.round(v) === 0 ? "0 %" : `${v > 0 ? "+" : ""}${v.toFixed(0)} %`;
+const pctCell = v => el("td", {className: "num " + (v > 0.5 ? "pos" : v < -0.5 ? "neg" : ""), textContent: pct(v)});
+const price = v => v >= 1 ? v.toFixed(2) : v.toPrecision(3);
+const table = (head, rows) => el("div", {className: "tbl"}, el("table", {},
+  el("thead", {}, el("tr", {}, ...head.map(h => el("th", {textContent: h})))), el("tbody", {}, ...rows)));
+
+async function loadOverview(coin) {
+  const box = $("overview");
+  box.replaceChildren(el("p", {className: "hint", textContent: "Lade Berichte und aktuelle Kurse …"}));
+  let data;
+  try { data = await api(`/api/coins/${encodeURIComponent(coin.id)}/overview`); }
+  catch (e) { box.replaceChildren(el("p", {className: "err", textContent: e.message})); return; }
+  if (selected?.file || selected?.coin.id !== coin.id) return;  // the user moved on meanwhile
+  if (!data.reports.length) {
+    box.replaceChildren(el("p", {className: "placeholder", textContent:
+      "Noch kein Bericht. Wähle oben Von und Bis und klicke auf „Bericht erstellen“."}));
+    return;
+  }
+  const open = r => { const b = el("button", {type: "button", className: "link", textContent: "öffnen"});
+                      b.addEventListener("click", () => show(coin, r)); return b; };
+  const reports = table(["Zeitraum", "Erstellt", "Version", ""], data.reports.slice().reverse().map(r => el("tr", {},
+    el("td", {textContent: `${de(r.start)} – ${de(r.end)}`}),
+    el("td", {textContent: r.created ? deTime(r.created) : "–"}),
+    el("td", {className: r.outdated ? "warn" : "", textContent: (r.version || "ohne Angabe") + (r.outdated ? " (veraltet)" : "")}),
+    el("td", {}, open(r)))));
+  const byFile = Object.fromEntries(data.reports.map(r => [r.file, r]));
+  const signals = data.signals.length ? table(
+    ["Datum", "Signal", "Kurs", "Max. Gewinn", "Max. Drawdown", "Tag Drawdown", "Stand heute", "Bericht"],
+    data.signals.map(s => el("tr", {},
+      el("td", {className: "num", textContent: de(s.day) + (s.end_day && s.end_day !== s.day ? ` – ${de(s.end_day).slice(0, 6)}` : "")}),
+      el("td", {}, el("span", {className: "pill " + s.kind, textContent: s.label, title: (s.reasons || []).join("\n")})),
+      el("td", {className: "num", textContent: price(s.close)}),
+      pctCell(s.max_runup_pct), pctCell(s.max_drawdown_pct),
+      el("td", {className: "num", textContent: s.drawdown_day ? de(s.drawdown_day) : "–"}),
+      pctCell(s.current_pct),
+      el("td", {}, open(byFile[s.reports.at(-1)])))))
+    : el("p", {className: "hint", textContent: "Keine Kauf- oder Verkaufssignale in den Berichten."});
+  const p = data.prices;
+  const note = p ? `Kurse bis ${de(p.until)} (${p.source}), letzter Schluss ${price(p.close)} $. ` : "";
+  box.replaceChildren(
+    el("div", {}, el("h2", {textContent: `Berichte (${data.reports.length})`}), reports),
+    el("div", {}, el("h2", {textContent: `Kauf- und Verkaufssignale (${data.signals.length})`}), signals,
+      el("p", {className: "hint", textContent: note + "Max. Gewinn, max. Drawdown und Stand heute gerechnet ab dem " +
+        "Schlusskurs des Signaltags bis zum letzten Kurs, aus Sicht der Position: Kauf als Long, Verkauf als Short. " +
+        "Mit Tageshoch und -tief, wo die Quelle sie liefert. Signale aus überlappenden Berichten stehen nur einmal da, die Gründe zeigt der Mauszeiger auf dem Signal."})));
 }
 async function startReport(id, days, start, end) {
   try { await api("/api/reports", {id, days, start, end}); openCoins.add(id); await refresh(); }
@@ -278,10 +342,11 @@ function renderJobs() {
 }
 async function refresh() {
   state = await api("/api/state");
-  // An empty detail page switches to the coin's first report once it is there.
   if (selected && !selected.file) {
     const coin = state.coins.find(c => c.id === selected.coin.id);
-    if (coin && coin.reports.length) return show(coin, coin.reports.at(-1)), refresh();
+    // The first report of a new coin opens itself; a further one refreshes the overview.
+    if (coin && coin.reports.length > selected.count)
+      return show(coin, selected.count ? null : coin.reports.at(-1)), refresh();
   }
   // A shown report that was just updated is reloaded.
   if (selected?.file) {

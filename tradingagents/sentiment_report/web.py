@@ -22,8 +22,11 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import pandas as pd
+
 from tradingagents.dataflows.vendors import crypto_sentiment as sources
 from tradingagents.sentiment_report import REPORT_VERSION, software_version
+from tradingagents.sentiment_report.signals import excursion
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,7 @@ COIN_ID = re.compile(r"^[A-Z0-9]{1,15}$")
 REPORT_FILE = re.compile(r"^([A-Z0-9]{1,15})_(\d{8})-(\d{8})_sentiment\.html$")
 REPORT_META = re.compile(r'<meta name="report-(created|version)" content="([^"]*)">')
 UNIVERSE_TTL_SECONDS = 6 * 3600
+PRICE_TTL_SECONDS = 15 * 60
 PAGE = Path(__file__).with_name("static") / "index.html"
 
 
@@ -57,6 +61,7 @@ class Library:
         self.llm_backend, self.llm_model = llm_backend, llm_model
         self._lock = threading.Lock()
         self._universe: tuple[float, list[dict], str] | None = None
+        self._prices: dict[tuple[str, date], tuple[float, pd.DataFrame, str]] = {}
         self.jobs: list[dict] = []
         self._queue: queue.Queue = queue.Queue()
         threading.Thread(target=self._work, daemon=True).start()
@@ -125,6 +130,66 @@ class Library:
         taken = set(self._registered()) | self._report_coins()
         return {"source": self._universe[2], "coins": [c for c in self._universe[1] if c["id"] not in taken]}
 
+    # --- coin overview -----------------------------------------------------
+
+    def _prices_until_today(self, coin_id: str, since: date, saved: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+        """Daily prices from the first signal to today, else the closes stored in the reports."""
+        cached = self._prices.get((coin_id, since))
+        if cached and time.time() - cached[0] < PRICE_TTL_SECONDS:
+            return cached[1], cached[2]
+        try:
+            frame, origin = sources.fetch_price(coin_id, since, date.today())
+        except sources.SourceError as exc:
+            logger.warning("Kurse für %s nicht abrufbar: %s", coin_id, exc)
+            return saved, "Schlusskurse aus den Berichten, aktuelle Kurse nicht abrufbar"
+        self._prices[(coin_id, since)] = (time.time(), frame, origin)
+        return frame, origin
+
+    def overview(self, coin_id: str) -> dict:
+        """All reports of a coin and their buy and sell signals, each scored up to today."""
+        coin_id = coin_id.strip().upper()
+        if not COIN_ID.match(coin_id):
+            raise ValueError("Ungültige Coin-ID")
+        reports = sorted((r for r in self._reports() if r["coin"] == coin_id), key=lambda r: (r["end"], r["start"]))
+        found: dict[tuple[str, str], dict] = {}
+        closes: dict[pd.Timestamp, float] = {}
+        for report in reports:
+            try:
+                data = json.loads((self.folder / report["file"].replace(".html", ".json")).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            for row in data.get("tageswerte", []):
+                if row.get("close") is not None:
+                    closes[pd.Timestamp(row["datum"])] = row["close"]
+            for signal in data.get("signale", []):
+                if signal.get("kind") not in ("buy", "sell"):
+                    continue
+                # Overlapping periods find the same signal again; later reports win.
+                entry = found.setdefault((signal["kind"], signal["day"]), {"reports": []})
+                entry.update({k: signal.get(k) for k in ("kind", "label", "day", "end_day", "close", "reasons")})
+                entry["reports"].append(report["file"])
+        signals = sorted(found.values(), key=lambda s: s["day"])
+        result = {"coin": coin_id, "reports": reports, "signals": signals, "prices": None}
+        if not signals:
+            return result
+        saved = pd.DataFrame({"close": pd.Series(closes, dtype="float64")}).sort_index()
+        prices, origin = self._prices_until_today(coin_id, date.fromisoformat(signals[0]["day"]), saved)
+        if prices.empty:
+            return result
+        last_day = prices.index[-1]
+        last_close = float(prices["close"].iloc[-1])
+        result["prices"] = {"source": origin, "until": last_day.date().isoformat(), "close": last_close}
+        for signal in signals:
+            short = signal["kind"] == "sell"
+            found_move = excursion(signal["close"], pd.Timestamp(signal["day"]), prices, last_day, short)
+            if found_move:
+                drawdown, gain, drawdown_day = found_move
+                signal.update(max_drawdown_pct=drawdown, max_runup_pct=gain,
+                              drawdown_day=drawdown_day.date().isoformat())
+            move = 100 * (last_close / signal["close"] - 1)
+            signal["current_pct"] = -move if short else move
+        return result
+
     # --- report jobs -------------------------------------------------------
 
     def queue_report(self, coin_id: str, start: str | None, end: str | None, days: int) -> dict:
@@ -185,6 +250,11 @@ def make_handler(library: Library):
                     self._json(library.universe())
                 except sources.SourceError as exc:
                     self._json({"error": f"Coin-Liste nicht abrufbar: {exc}"}, HTTPStatus.BAD_GATEWAY)
+            elif path.startswith("/api/coins/") and path.endswith("/overview"):
+                try:
+                    self._json(library.overview(path.removeprefix("/api/coins/").removesuffix("/overview")))
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             elif path.startswith("/reports/") and REPORT_FILE.match(path.removeprefix("/reports/")):
                 file = library.folder / path.removeprefix("/reports/")
                 if file.is_file():
