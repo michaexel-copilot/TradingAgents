@@ -160,6 +160,70 @@ def backtest(
         console.print(f"[yellow]unsettled:[/yellow] {ticker}: {reason}")
 
 
+@app.command()
+def sentiment(
+    coin: str = typer.Argument(..., help="Coin ticker, e.g. QNT"),
+    start: str = typer.Option(None, "--start", help="First day, YYYY-MM-DD"),
+    end: str = typer.Option(None, "--end", help="Last day, YYYY-MM-DD (default: today)"),
+    days: int = typer.Option(56, "--days", help="Days back when --start is omitted (default: 8 weeks)"),
+    llm: str = typer.Option(
+        "auto", "--llm", envvar="SENTIMENT_LLM",
+        help="Written assessment: claude-code (your own Claude plan, claude -p), "
+        "api (ANTHROPIC_API_KEY), none, or auto",
+    ),
+    model: str = typer.Option(None, "--model", help="Model, e.g. sonnet (claude-code) or claude-sonnet-5 (api)"),
+    santiment_slug: str = typer.Option(None, "--santiment-slug", help="Santiment project slug if the ticker is ambiguous"),
+    out: str = typer.Option(None, "--out", help="Output folder (default: <results_dir>/sentiment)"),
+):
+    """Sentiment report with buy and sell signals for one coin and period, as HTML and JSON."""
+    from tradingagents.sentiment_report.__main__ import run as run_sentiment
+
+    code = run_sentiment(coin, start, end, days, llm, model, santiment_slug, out,
+                         say=lambda line: console.print(line, markup=False, highlight=False))
+    raise typer.Exit(code=code)
+
+
+@app.command("sentiment-web")
+def sentiment_web(
+    port: int = typer.Option(8765, "--port", help="Port on localhost"),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Do not open the browser"),
+    llm: str = typer.Option("auto", "--llm", envvar="SENTIMENT_LLM",
+                            help="Assessment backend for reports started from the page (as for `sentiment`)"),
+    model: str = typer.Option(None, "--model", help="Model for the assessment"),
+    out: str = typer.Option(None, "--out", help="Report folder (default: <results_dir>/sentiment)"),
+):
+    """Local web page: the saved sentiment reports as a tree, and a form to add coins."""
+    from pathlib import Path
+
+    from tradingagents.sentiment_report.__main__ import default_out_dir
+    from tradingagents.sentiment_report.web import serve
+
+    serve(Path(out) if out else default_out_dir(), port=port, open_browser=not no_browser,
+          llm_backend=llm, llm_model=model,
+          say=lambda line: console.print(line, markup=False, highlight=False))
+
+
+@app.command("sentiment-refresh")
+def sentiment_refresh(
+    coins: Annotated[list[str] | None, typer.Argument(help="Only these coins, e.g. NEAR QNT")] = None,
+    dry_run: bool = typer.Option(False, "--dry-run", help="Only list the outdated reports"),
+    llm: str = typer.Option("auto", "--llm", envvar="SENTIMENT_LLM", help="Assessment backend (as for `sentiment`)"),
+    model: str = typer.Option(None, "--model", help="Model for the assessment"),
+    out: str = typer.Option(None, "--out", help="Report folder (default: <results_dir>/sentiment)"),
+    pause: float = typer.Option(2.0, "--pause", help="Seconds between two reports"),
+):
+    """Re-run all reports made by an older software version, same coin and period."""
+    from pathlib import Path
+
+    from tradingagents.sentiment_report.__main__ import default_out_dir
+    from tradingagents.sentiment_report.refresh import refresh
+
+    failed = refresh(Path(out) if out else default_out_dir(), llm_backend=llm, llm_model=model, coins=coins,
+                     dry_run=dry_run, pause=pause,
+                     say=lambda line: console.print(line, markup=False, highlight=False))
+    raise typer.Exit(code=1 if failed else 0)
+
+
 # The plans `login` and `logout` take: the providers signed in to, not keyed.
 Plan = StrEnum("Plan", {name: name for name in SIGNED_IN_PROVIDERS})
 

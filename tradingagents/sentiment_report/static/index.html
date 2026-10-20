@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sentiment-Berichte</title>
+<style>
+:root{--bg:#f4f6f8;--panel:#fff;--ink:#15202b;--muted:#5a6773;--line:#d9dfe5;--accent:#2b4cc4;--accent-bg:#e8edfb;
+--ok:#1a8a5a;--err:#c2412d;--warn:#a86a12;--mono:ui-monospace,Consolas,Menlo,monospace;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0f151b;--panel:#161e26;--ink:#e6ecf1;--muted:#9aa7b3;--line:#2a3540;
+--accent:#7d9bff;--accent-bg:#1d2740;--ok:#4cc58f;--err:#f07a63;--warn:#e0a24a;color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+h1{font-size:18px;margin:0}
+form{display:grid;grid-template-columns:minmax(220px,1.4fr) minmax(220px,1.6fr) auto;gap:12px;align-items:start}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+input,select,button{min-width:0;width:100%;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:6px 8px}
+select[size]{padding:2px;height:150px}
+optgroup{font-style:normal;color:var(--muted)}
+option{color:var(--ink)}
+button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+.fields{display:grid;grid-template-columns:110px 1fr;gap:8px}
+.check{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
+.check input{width:auto}
+.actions{display:flex;flex-direction:column;gap:8px;padding-top:19px}
+#msg{font-size:13px}
+#msg:empty,#jobs:empty{display:none}
+#add-box>summary{cursor:pointer;font-weight:600;color:var(--accent);width:max-content;padding:2px 0}
+#add-box[open]>summary{margin-bottom:10px}
+.err{color:var(--err)}.ok{color:var(--ok)}.warn{color:var(--warn)}
+main{flex:1;display:grid;grid-template-columns:300px 1fr;min-height:0}
+nav{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+nav .filter{padding:10px;border-bottom:1px solid var(--line)}
+nav .filter input{width:100%}
+#tree{overflow:auto;padding:6px 8px 16px 4px;flex:1}
+details{margin-left:10px}
+summary{cursor:pointer;padding:3px 6px;border-radius:4px;list-style-position:outside}
+summary:hover{background:var(--bg)}
+.letter>summary{font:700 14px var(--mono)}
+.coin>summary .id{font-family:var(--mono);font-weight:600}
+.coin>summary .name{color:var(--muted)}
+.coin>summary .rank{margin-left:6px;font:12px var(--mono);color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:0 5px}
+.date{display:block;width:calc(100% - 22px);min-width:0;margin:1px 0 1px 22px;text-align:left;background:none;border:0;color:var(--ink);font:13px var(--mono);font-weight:400;padding:3px 6px;border-radius:4px}
+.date:hover{background:var(--bg)}
+.date.ghost{color:var(--accent);font-family:inherit}
+.date.active,.coin>summary.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
+.empty{margin:2px 0 2px 28px;font-size:13px;color:var(--muted)}
+section{display:flex;flex-direction:column;min-height:0;min-width:0}
+.detail-head{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
+.detail-head .meta{font-size:14px}
+.detail-head .meta b{font-family:var(--mono)}
+.detail-head .stamp{display:block;font-size:13px;color:var(--muted)}
+.detail-head .stamp.warn{color:var(--warn)}
+.detail-head .tools{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.detail-head .tools>button{width:auto}
+form.rerun{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+form.rerun label{flex-direction:column;width:150px}
+form.rerun button{width:auto}
+iframe{flex:1;border:0;width:100%;background:var(--bg)}
+.placeholder{padding:40px 16px;color:var(--muted)}
+#overview{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:18px}
+#overview h2{font-size:16px;margin:0 0 8px}
+.tbl{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px}
+#overview table{border-collapse:collapse;width:100%;font-size:14px}
+#overview th,#overview td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+#overview th{font-size:12px;color:var(--muted);font-weight:600}
+#overview tr:last-child td{border-bottom:0}
+#overview td.num{text-align:right;font-family:var(--mono)}
+#overview .pos{color:var(--ok)}#overview .neg{color:var(--err)}
+#overview button.link.danger{color:var(--err)}
+#overview button.link{width:auto;background:none;border:0;padding:0;color:var(--accent);font-weight:400;text-decoration:underline}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600}
+.pill.buy{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.pill.sell{background:color-mix(in srgb,var(--err) 15%,transparent);color:var(--err)}
+.hint{font-size:13px;color:var(--muted);margin:6px 0 0}
+#jobs{font-size:13px;display:flex;flex-wrap:wrap;gap:6px 14px}
+@media (max-width:820px){
+  form{grid-template-columns:1fr}.actions{padding-top:0}
+  main{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  nav{border-right:0;border-bottom:1px solid var(--line);max-height:40vh}
+  iframe{min-height:70vh}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sentiment-Berichte</h1>
+  <details id="add-box" open>
+  <summary>Coin suchen und anlegen</summary>
+  <form id="add">
+    <label>Coin suchen (Name oder ID)
+      <input id="search" type="search" placeholder="z.B. QNT oder Quant" autocomplete="off">
+      <span id="universe-note"></span>
+    </label>
+    <label>Coin aus der Liste wählen
+      <select id="pick" size="8"></select>
+    </label>
+    <div class="actions">
+      <div class="fields">
+        <label>Coin-ID<input id="coin-id" required maxlength="15" placeholder="QNT"></label>
+        <label>Coin-Name<input id="coin-name" required maxlength="80" placeholder="Quant"></label>
+      </div>
+      <button type="submit">Coin anlegen</button>
+    </div>
+  </form>
+  </details>
+  <div id="msg"></div>
+  <div id="jobs"></div>
+</header>
+<main>
+  <nav>
+    <div class="filter"><input id="tree-filter" type="search" placeholder="Berichte filtern (Name oder ID)"></div>
+    <div id="tree"></div>
+  </nav>
+  <section>
+    <div class="detail-head" id="detail-head" hidden>
+      <div class="meta" id="detail-meta"></div>
+      <div class="tools" id="tools">
+        <form class="rerun" id="rerun">
+          <label>Von<input id="rerun-start" type="date" required></label>
+          <label>Bis<input id="rerun-end" type="date" required></label>
+          <button class="ghost" type="submit">Bericht erstellen</button>
+        </form>
+      </div>
+    </div>
+    <div class="placeholder" id="placeholder">Wähle links einen Coin für die Übersicht oder ein Datum für den Bericht.</div>
+    <div id="overview" hidden></div>
+    <iframe id="report" title="Bericht" hidden></iframe>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const el = (tag, props = {}, ...children) => {
+  const node = Object.assign(document.createElement(tag), props);
+  children.forEach(c => node.append(c));
+  return node;
+};
+const de = iso => iso.split("-").reverse().join(".");
+const deTime = iso => iso ? `${de(iso.slice(0, 10))} um ${iso.slice(11, 16)} Uhr` : "";
+let state = {coins: [], jobs: []}, universe = [], selected = null, openCoins = new Set(), polling = null;
+
+async function api(path, body) {
+  const res = await fetch(path, body ? {method: "POST", headers: {"Content-Type": "application/json"},
+                                        body: JSON.stringify(body)} : {});
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+function matches(coin, q) {
+  q = q.trim().toLowerCase();
+  return !q || coin.id.toLowerCase().includes(q) || (coin.name || "").toLowerCase().includes(q);
+}
+
+// --- form: coin list in packets of 100 by rank -----------------------------
+function renderPick() {
+  const q = $("search").value, pick = $("pick");
+  pick.replaceChildren();
+  const groups = new Map();
+  universe.filter(c => matches(c, q)).forEach(c => {
+    const from = Math.floor((c.rank - 1) / 100) * 100 + 1;
+    if (!groups.has(from)) groups.set(from, el("optgroup", {label: `Rang ${from}–${from + 99}`}));
+    groups.get(from).append(el("option", {value: c.id, textContent: `${c.id} (${c.name}) · #${c.rank}`}));
+  });
+  groups.forEach(g => pick.append(g));
+  if (!groups.size) pick.append(el("option", {disabled: true, textContent: universe.length ? "Kein Treffer" : "Liste nicht geladen"}));
+}
+async function loadUniverse() {
+  const note = $("universe-note");
+  try {
+    const data = await api("/api/universe");
+    universe = data.coins;
+    note.textContent = `${universe.length} Coins von ${data.source}, ohne bereits analysierte`;
+    note.className = "";
+  } catch (e) {
+    note.textContent = e.message + " – ID und Name lassen sich auch von Hand eintragen.";
+    note.className = "err";
+  }
+  renderPick();
+}
+$("search").addEventListener("input", renderPick);
+$("pick").addEventListener("change", () => {
+  const coin = universe.find(c => c.id === $("pick").value);
+  if (coin) { $("coin-id").value = coin.id; $("coin-name").value = coin.name; }
+});
+$("add").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const msg = $("msg");
+  try {
+    const data = await api("/api/coins", {id: $("coin-id").value, name: $("coin-name").value});
+    msg.textContent = `${data.coin.id} angelegt. Wähle rechts den Zeitraum für den ersten Bericht.`;
+    msg.className = "ok";
+    openCoins.add(data.coin.id);
+    universe = universe.filter(c => c.id !== data.coin.id);
+    $("coin-id").value = $("coin-name").value = "";
+    renderPick();
+    await refresh();
+    show(state.coins.find(c => c.id === data.coin.id) || {...data.coin, reports: []}, null);
+  } catch (e) { msg.textContent = e.message; msg.className = "err"; }
+});
+
+// --- tree: letter > coin > report end date ---------------------------------
+function renderTree() {
+  const q = $("tree-filter").value, tree = $("tree");
+  tree.replaceChildren();
+  const letters = new Map();
+  state.coins.filter(c => matches(c, q)).forEach(c => {
+    const letter = c.id[0];
+    if (!letters.has(letter)) letters.set(letter, []);
+    letters.get(letter).push(c);
+  });
+  if (!letters.size) tree.append(el("p", {className: "empty", textContent: state.coins.length ? "Kein Treffer" : "Noch keine Coins. Lege oben einen an."}));
+  [...letters.keys()].sort().forEach(letter => {
+    const group = el("details", {className: "letter", open: true}, el("summary", {textContent: letter}));
+    letters.get(letter).forEach(c => {
+      const summary = el("summary", {}, el("span", {className: "id", textContent: c.id}),
+                         " ", el("span", {className: "name", textContent: c.name ? `(${c.name})` : ""}),
+                         c.rank ? el("span", {className: "rank", textContent: `#${c.rank}`,
+                                              title: "Position auf cryptobubbles.net"}) : "");
+      const node = el("details", {className: "coin", open: openCoins.has(c.id) || !!q}, summary);
+      node.addEventListener("toggle", () => node.open ? openCoins.add(c.id) : openCoins.delete(c.id));
+      summary.addEventListener("click", ev => {
+        // The first click on a coin opens its overview and keeps it open; a second one folds it.
+        const current = selected && !selected.file && selected.coin.id === c.id;
+        if (!current && node.open) ev.preventDefault();
+        show(c, null);
+      });
+      if (selected && !selected.file && selected.coin.id === c.id) summary.classList.add("active");
+      const ends = c.reports.map(r => r.end);
+      c.reports.forEach(r => {
+        const twice = ends.filter(e => e === r.end).length > 1;
+        const label = de(r.end) + (twice ? ` (ab ${de(r.start)})` : "");
+        const btn = el("button", {type: "button", className: "date" + (selected?.file === r.file ? " active" : ""),
+                                  textContent: label, title: `Zeitraum ${de(r.start)} – ${de(r.end)}`});
+        btn.addEventListener("click", () => show(c, r));
+        node.append(btn);
+      });
+      const job = state.jobs.filter(j => j.coin === c.id && j.status !== "fertig").pop();
+      if (job) node.append(el("div", {className: "empty " + (job.status === "fehler" ? "err" : "warn"),
+                                      textContent: job.status === "fehler" ? `Fehler: ${job.message}` : `Bericht ${job.status} …`}));
+      if (!c.reports.length && (!job || job.status === "fehler"))
+        node.append(el("div", {className: "empty", textContent: "noch kein Bericht"}));
+      group.append(node);
+    });
+    tree.append(group);
+  });
+}
+$("tree-filter").addEventListener("input", renderTree);
+
+const signature = coin => (coin.reports || []).map(r => r.file + r.created).join("|");
+// A coin's detail: one report, or with report null the coin's overview (reports and signals).
+function show(coin, report) {
+  selected = {...(report || {}), coin, count: coin.reports?.length || 0, sig: signature(coin)};
+  openCoins.add(coin.id);
+  if ($("detail-head").hidden) resetPeriod();
+  $("detail-head").hidden = false;
+  $("detail-meta").replaceChildren(el("b", {textContent: coin.id}), coin.name ? ` (${coin.name})` : "",
+    coin.rank ? ` · Cryptobubbles #${coin.rank}` : "",
+    report ? ` · Bericht vom ${de(report.end)} · Zeitraum ${de(report.start)} – ${de(report.end)}` : " · Übersicht");
+  if (report) $("detail-meta").append(el("span", {
+    className: "stamp" + (report.outdated ? " warn" : ""),
+    textContent: (report.created ? `Erstellt am ${deTime(report.created)} · Version ${report.version}`
+                                 : "Erstellt mit einer älteren Version ohne Versionsangabe")
+                 + (report.outdated ? ` · aktuelle Version ${state.version}` : "")}));
+  $("tools").hidden = !!report;  // new and updated reports are managed in the overview
+  const frame = $("report");
+  frame.hidden = !report;
+  $("placeholder").hidden = true;
+  $("overview").hidden = !!report;
+  if (report) frame.src = "/reports/" + encodeURIComponent(report.file) + "?v=" + encodeURIComponent(report.created);
+  else { frame.removeAttribute("src"); loadOverview(coin); }
+  renderTree();
+}
+
+const pct = v => v == null ? "–" : Math.round(v) === 0 ? "0 %" : `${v > 0 ? "+" : ""}${v.toFixed(0)} %`;
+const pctCell = v => el("td", {className: "num " + (v > 0.5 ? "pos" : v < -0.5 ? "neg" : ""), textContent: pct(v)});
+const price = v => v >= 1 ? v.toFixed(2) : v.toPrecision(3);
+const table = (head, rows) => el("div", {className: "tbl"}, el("table", {},
+  el("thead", {}, el("tr", {}, ...head.map(h => el("th", {textContent: h})))), el("tbody", {}, ...rows)));
+
+async function loadOverview(coin) {
+  const box = $("overview");
+  box.replaceChildren(el("p", {className: "hint", textContent: "Lade Berichte und aktuelle Kurse …"}));
+  let data;
+  try { data = await api(`/api/coins/${encodeURIComponent(coin.id)}/overview`); }
+  catch (e) { box.replaceChildren(el("p", {className: "err", textContent: e.message})); return; }
+  if (selected?.file || selected?.coin.id !== coin.id) return;  // the user moved on meanwhile
+  if (!data.reports.length) {
+    box.replaceChildren(el("p", {className: "placeholder", textContent:
+      "Noch kein Bericht. Wähle oben Von und Bis und klicke auf „Bericht erstellen“."}));
+    return;
+  }
+  const open = r => { const b = el("button", {type: "button", className: "link", textContent: "öffnen"});
+                      b.addEventListener("click", () => show(coin, r)); return b; };
+  // Deleting asks once more on the button itself before anything is removed.
+  const remove = r => {
+    const b = el("button", {type: "button", className: "link danger", textContent: "löschen"});
+    b.addEventListener("click", async () => {
+      if (!b.dataset.armed) {
+        b.dataset.armed = "1"; b.textContent = "wirklich löschen?";
+        setTimeout(() => { delete b.dataset.armed; b.textContent = "löschen"; }, 4000);
+        return;
+      }
+      try { await api("/api/reports/delete", {file: r.file}); }
+      catch (e) { $("msg").textContent = e.message; $("msg").className = "err"; return; }
+      await refresh();
+      show(state.coins.find(c => c.id === coin.id) || {...coin, reports: []}, null);
+    });
+    return b;
+  };
+  // Same coin and period again, made by the software as it is now; replaces the report file.
+  const update = r => {
+    const b = el("button", {type: "button", className: "link", textContent: "aktualisieren",
+                            title: "Mit der neuesten Software-Version neu erstellen"});
+    b.addEventListener("click", () => { b.disabled = true; b.textContent = "läuft …"; startReport(coin.id, 60, r.start, r.end); });
+    return b;
+  };
+  const reports = table(["Zeitraum", "Erstellt", "Version", "", "", ""], data.reports.slice().reverse().map(r => el("tr", {},
+    el("td", {textContent: `${de(r.start)} – ${de(r.end)}`}),
+    el("td", {textContent: r.created ? deTime(r.created) : "–"}),
+    el("td", {className: r.outdated ? "warn" : "", textContent: (r.version || "ohne Angabe") + (r.outdated ? " (veraltet)" : "")}),
+    el("td", {}, open(r)), el("td", {}, update(r)), el("td", {}, remove(r)))));
+  const byFile = Object.fromEntries(data.reports.map(r => [r.file, r]));
+  const signals = data.signals.length ? table(
+    ["Datum", "Signal", "Kurs", "Max. Gewinn", "Max. Drawdown", "Tag Drawdown", "Stand heute", "Bericht"],
+    data.signals.map(s => el("tr", {},
+      el("td", {className: "num", textContent: de(s.day) + (s.end_day && s.end_day !== s.day ? ` – ${de(s.end_day).slice(0, 6)}` : "")}),
+      el("td", {}, el("span", {className: "pill " + s.kind, textContent: s.label, title: (s.reasons || []).join("\n")})),
+      el("td", {className: "num", textContent: price(s.close)}),
+      pctCell(s.max_runup_pct), pctCell(s.max_drawdown_pct),
+      el("td", {className: "num", textContent: s.drawdown_day ? de(s.drawdown_day) : "–"}),
+      pctCell(s.current_pct),
+      el("td", {}, open(byFile[s.reports.at(-1)])))))
+    : el("p", {className: "hint", textContent: "Keine Kauf- oder Verkaufssignale in den Berichten."});
+  const p = data.prices;
+  const note = p ? `Kurse bis ${de(p.until)} (${p.source}), letzter Schluss ${price(p.close)} $. ` : "";
+  box.replaceChildren(
+    el("div", {}, el("h2", {textContent: `Berichte (${data.reports.length})`}), reports),
+    el("div", {}, el("h2", {textContent: `Kauf- und Verkaufssignale (${data.signals.length})`}), signals,
+      el("p", {className: "hint", textContent: note + "Max. Gewinn, max. Drawdown und Stand heute gerechnet ab dem " +
+        "Schlusskurs des Signaltags bis zum letzten Kurs, aus Sicht der Position: Kauf als Long, Verkauf als Short. " +
+        "Mit Tageshoch und -tief, wo die Quelle sie liefert. Signale aus überlappenden Berichten stehen nur einmal da, die Gründe zeigt der Mauszeiger auf dem Signal."})));
+}
+async function startReport(id, days, start, end) {
+  try { await api("/api/reports", {id, days, start, end}); openCoins.add(id); await refresh(); }
+  catch (e) { $("msg").textContent = e.message; $("msg").className = "err"; }
+}
+// Default period for a new report: the last 60 days up to today (local date).
+const isoDay = d => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+function resetPeriod() {
+  const today = new Date();
+  $("rerun-end").value = $("rerun-end").max = $("rerun-start").max = isoDay(today);
+  $("rerun-start").value = isoDay(new Date(today.getTime() - 60 * 864e5));
+}
+$("rerun").addEventListener("submit", ev => {
+  ev.preventDefault();
+  const start = $("rerun-start").value, end = $("rerun-end").value;
+  if (start >= end) { $("msg").textContent = "Der Anfang muss vor dem Ende liegen"; $("msg").className = "err"; return; }
+  if (selected) startReport(selected.coin.id, 60, start, end);
+});
+
+// --- jobs and refresh --------------------------------------------------------
+function renderJobs() {
+  const jobs = $("jobs");
+  jobs.replaceChildren(...state.jobs.slice(-6).map(j => el("span", {
+    className: {fertig: "ok", fehler: "err"}[j.status] || "warn",
+    textContent: `${j.coin} ${de(j.start)}–${de(j.end)}: ${j.status}${j.message ? " · " + j.message : ""}`}))); 
+}
+async function refresh() {
+  state = await api("/api/state");
+  if (selected && !selected.file) {
+    const coin = state.coins.find(c => c.id === selected.coin.id);
+    // The first report of a new coin opens itself; any other change refreshes the overview.
+    if (coin && !selected.count && coin.reports.length) return show(coin, coin.reports.at(-1)), refresh();
+    if (coin && signature(coin) !== selected.sig) show(coin, null);
+  }
+  // A shown report that was just updated is reloaded.
+  if (selected?.file) {
+    const coin = state.coins.find(c => c.id === selected.coin.id);
+    const now = coin?.reports.find(r => r.file === selected.file);
+    if (now && now.created !== selected.created) show(coin, now);
+  }
+  renderTree();
+  renderJobs();
+  const busy = state.jobs.some(j => j.status === "wartet" || j.status === "läuft");
+  if (busy && !polling) polling = setInterval(refresh, 3000);
+  if (!busy && polling) { clearInterval(polling); polling = null; }
+}
+// The search box folds away for more room; the page remembers it per browser.
+try { if (localStorage.getItem("addBoxOpen") === "0") $("add-box").open = false; } catch (e) {}
+$("add-box").addEventListener("toggle", () => {
+  try { localStorage.setItem("addBoxOpen", $("add-box").open ? "1" : "0"); } catch (e) {}
+});
+refresh().then(loadUniverse).then(refresh);
+</script>
+</body>
+</html>
