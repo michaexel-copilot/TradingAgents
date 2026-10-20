@@ -264,7 +264,7 @@ def test_crowd_all_long_blocks_buy_and_counts_toward_sell():
     features = add_features(frame)
     row = features.loc["2026-09-22"].copy()
     buy = [s for s in detect_day(row, 0, Thresholds()) if s.kind == "buy"]
-    assert buy and any("Long-Anteil 45 % (Crowd skeptisch)" in r for r in buy[0].reasons)
+    assert buy and any(r.startswith("Long-Anteil 45 % (Crowd skeptisch") for r in buy[0].reasons)
     row["long_share"], row["long_shift"] = 0.74, 0.29
     row["rsi"], row["extension"] = 85.0, 1.4
     signals = detect_day(row, 0, Thresholds())
@@ -284,7 +284,7 @@ def test_outcomes_carry_max_drawdown_for_sl_tp():
     assert sell.max_drawdown_pct == pytest.approx(-100 * (287.07 / 286.1 - 1))
     assert sell.drawdown_day == pd.Timestamp("2026-09-30")
     assert sell.max_runup_pct > 30
-    assert "max. Drawdown als Short -0 % (30.09.)" in sell.outcome
+    assert "max. Drawdown als Short 0 % (30.09.)" in sell.outcome
     assert "(Tief am 18.10.)" in watch.outcome
     assert buy.as_dict()["drawdown_day"] == "2026-09-23"
 
@@ -309,3 +309,13 @@ def test_report_carries_creation_time_and_software_version(tmp_path):
     assert f"Erstellt am {made.created:%d.%m.%Y um %H:%M} Uhr · Software-Version {made.version}" in html
     data = json.loads(json_path.read_text(encoding="utf-8"))
     assert data["erstellt"] == made.created.isoformat() and data["software_version"] == made.version
+
+
+def test_habitually_high_long_share_does_not_block_buy():
+    # NEAR in August 2026: 60-70 % long accounts for months, 66 % on the breakout day.
+    row = add_features(qnt_frame().assign(long_share=0.45)).loc["2026-09-22"].copy()
+    row["long_share"], row["long_shift"] = 0.66, 0.02
+    buy = [s for s in detect_day(row, 0, Thresholds()) if s.kind == "buy"]
+    assert buy and any("Long-Anteil 66 % (Crowd eher long, +2 Punkte zum Schnitt)" in r for r in buy[0].reasons)
+    row["long_shift"] = 0.10
+    assert not [s for s in detect_day(row, 0, Thresholds()) if s.kind == "buy"]

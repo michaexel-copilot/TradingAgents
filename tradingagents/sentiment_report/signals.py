@@ -144,10 +144,15 @@ def _crowd_checks(row: pd.Series, t: Thresholds) -> tuple[bool, list[str]]:
     if social is not None:
         ok &= social < t.quiet_social
         reasons.append(f"Social Volume {social:.1f}× Schnitt (Crowd {'noch ruhig' if social < t.quiet_social else 'schon laut'})")
-    long_share = _value(row, "long_share")
+    long_share, long_shift = _value(row, "long_share"), _value(row, "long_shift")
     if long_share is not None:
-        ok &= long_share < t.crowded_long
-        reasons.append(f"Long-Anteil {100 * long_share:.0f} % ({'Crowd skeptisch' if long_share <= 0.5 else 'Crowd eher long' if long_share < t.crowded_long else 'Crowd voll long'})")
+        # Many altcoins sit at 60-70 % long accounts for months, so the share alone says
+        # little; it blocks only when it is high and also well above its own 14-day mean.
+        crowded = long_share >= t.crowded_long and (long_shift is None or long_shift >= t.long_shift)
+        ok &= not crowded
+        shift = f", {100 * long_shift:+.0f} Punkte zum Schnitt" if long_shift is not None else ""
+        mood = "Crowd skeptisch" if long_share <= 0.5 else "Crowd voll long" if crowded else "Crowd eher long"
+        reasons.append(f"Long-Anteil {100 * long_share:.0f} % ({mood}{shift})")
     funding = _value(row, "funding")
     if funding is not None:
         ok &= funding <= t.neutral_funding
@@ -282,8 +287,12 @@ def _excursions(signal: Signal, features: pd.DataFrame, until: pd.Timestamp, sho
 def _excursion_text(signal: Signal, label: str = "max. Drawdown") -> str:
     if signal.max_drawdown_pct is None:
         return ""
-    return (f"; {label} {signal.max_drawdown_pct:+.0f} % ({signal.drawdown_day:%d.%m.}), "
-            f"max. Gewinn {signal.max_runup_pct:+.0f} %")
+    return (f"; {label} {_signed(signal.max_drawdown_pct)} ({signal.drawdown_day:%d.%m.}), "
+            f"max. Gewinn {_signed(signal.max_runup_pct)}")
+
+
+def _signed(pct: float) -> str:
+    return "0 %" if round(pct) == 0 else f"{pct:+.0f} %"
 
 
 def score_outcomes(signals: list[Signal], features: pd.DataFrame) -> None:

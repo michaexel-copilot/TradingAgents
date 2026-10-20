@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Version of the report logic, raised with every change to data, rules or layout, so the
 # web page can tell which reports were made by an older version.
-REPORT_VERSION = "1.0"
+REPORT_VERSION = "1.1"
 
 # Days fetched before the window so the 14- and 20-day averages are warm on day one.
 WARMUP_DAYS = 40
